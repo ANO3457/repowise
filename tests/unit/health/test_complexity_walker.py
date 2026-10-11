@@ -374,8 +374,10 @@ def test_python_class_cohesion():
     assert cohesive is not None and splintered is not None
     # All methods collaborate around shared state → single component.
     assert cohesive.lcom4 == 1
-    # Two disjoint field clusters + a loner → three components.
-    assert splintered.lcom4 == 3
+    # Two disjoint field clusters; the loner touches no field, so it is a
+    # component but not a group to extract.
+    assert splintered.lcom4 == 2
+    assert len(splintered.components) == 3
     assert splintered.method_count == 5
     assert splintered.field_count == 2
 
@@ -446,7 +448,7 @@ def test_typescript_class_cohesion():
     if cohesive is None or splintered is None:
         pytest.skip("typescript classes not detected")
     assert cohesive.lcom4 == 1
-    assert splintered.lcom4 == 3
+    assert splintered.lcom4 == 2
 
 
 def test_class_metrics_carry_methods_and_size():
@@ -792,7 +794,7 @@ def test_scala_class_cohesion():
     splintered = classes.get("Splintered")
     assert cohesive is not None and splintered is not None
     assert cohesive.lcom4 == 1
-    assert splintered.lcom4 == 3
+    assert splintered.lcom4 == 2
     assert splintered.method_count == 5
     assert splintered.field_count == 2
     # ``object`` and ``trait`` bodies group methods like a class body.

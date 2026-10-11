@@ -607,7 +607,11 @@ def _compute_lcom4(
     names field declarations (implicit receivers), overloads are one node and
     only ``_stateful_groups`` count toward LCOM4; a map that sets
     ``cohesion_counts_state_only`` gets the same count without the implicit
-    references.
+    references. Otherwise every access is a visible ``self.x``, so a
+    component touching one field is a real cluster, but one touching none is
+    a static helper or a hook override (a Move Method or a function, never a
+    class to extract): it stays in ``components``, where ``move_method``
+    reads the inherited members it calls, and does not count.
     """
     if not method_nodes:
         return 1, 0, [], 1.0
@@ -633,7 +637,8 @@ def _compute_lcom4(
     if implicit or lmap.cohesion_counts_state_only:
         groups = _stateful_groups(indexed, refs.contracts)
         return max(len(groups), 1), field_count, groups, tcc
-    return len(indexed), field_count, [g for _, g in indexed], tcc
+    components = [g for _, g in indexed]
+    return max(sum(1 for g in components if g.fields), 1), field_count, components, tcc
 
 
 def _collect_classes(
