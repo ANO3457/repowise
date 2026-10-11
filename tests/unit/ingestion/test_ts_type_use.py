@@ -133,7 +133,8 @@ def _build_graph(repo: Path, sources: dict[str, str]) -> nx.DiGraph:
     for rel in sources:
         abs_path = str((repo / rel).resolve())
         parsed = _PARSER.parse_file(
-            _file_info(rel, abs_path), (repo / rel).read_bytes()
+            _file_info(rel, abs_path, "python" if rel.endswith(".py") else "typescript"),
+            (repo / rel).read_bytes(),
         )
         builder.add_file(parsed)
     return builder.build()
@@ -250,6 +251,19 @@ class TestTsTypeUseEdges:
             "UsedAsImpl",
             "UsedAsExtends",
         } <= names
+
+    def test_stem_map_never_resolves_into_another_language(self, tmp_path: Path) -> None:
+        graph = _build_graph(
+            tmp_path,
+            {
+                "core/dispatch.py": "class Dispatch:\n    pass\n",
+                "ui/hook.ts": (
+                    'import { type Dispatch } from "react"\n'
+                    "export function useIt(set: Dispatch<number>): void {}\n"
+                ),
+            },
+        )
+        assert not graph.has_edge("ui/hook.ts", "core/dispatch.py")
 
 
 class TestTsDeadCodeOutcome:

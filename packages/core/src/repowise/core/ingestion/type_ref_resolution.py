@@ -768,6 +768,9 @@ def _ambient_declaration_names(
     return global_names
 
 
+_TS_STRATEGY_LANGUAGES = frozenset({"typescript", "javascript"})
+
+
 def _find_ts_type_in_stem_map(
     type_name: str,
     from_path: str,
@@ -788,6 +791,10 @@ def _find_ts_type_in_stem_map(
         return None
     candidate = candidates[0]
     if candidate == from_path:
+        return None
+    # The stem map spans every language: React's ``Dispatch`` matched a Python
+    # ``dispatch.py`` that defines a ``Dispatch`` class.
+    if (graph.nodes.get(candidate) or {}).get("language") not in _TS_STRATEGY_LANGUAGES:
         return None
     # Verify the candidate file actually exports a symbol matching name —
     # avoids accidentally matching ``utils.ts`` to a type called ``Utils``.
