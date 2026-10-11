@@ -161,7 +161,7 @@ fields on its `LanguageNodeMap` (all default to empty = opt-out):
   field reads and method calls).
 
 The receiver and member-name children are extracted by a generic
-field-name probe (`class_analysis._self_member_name`), which tries the
+field-name probe (`ast_utils.self_member_name`), which tries the
 `object`/`value`/`argument`/`expression` (receiver) and
 `property`/`attribute`/`field`/`name` (member) fields and then falls back
 to positional children — so most tree-sitter grammars need only the

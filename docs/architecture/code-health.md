@@ -436,7 +436,8 @@ languages that opt in (`LanguageNodeMap.class_kinds` non-empty: Python,
 TS/JS, Java, Kotlin, Rust `impl`, C++, C#; Go has no grouping node). LCOM4 is the number of
 connected components in the graph whose nodes are the class's methods and
 whose edges link methods that share an instance field or call one another.
-Member references are detected per-language via `self`/`this`/`$this`
+A component that touches no field (a static helper, a stateless hook
+override) is listed but not counted. Member references are detected per-language via `self`/`this`/`$this`
 member-access nodes. **Safety valve:** a class with no detected member
 references (a static utility, or an unmapped language) reports `lcom4 = 1`
 ("no signal") rather than `len(methods)`, so adding a language can only
