@@ -5,10 +5,16 @@ comment over it (the author's own name for the block), and the span's single
 OUT value as ``compute_<out>``. An OUT name describes a value, not an action,
 so it is never given to a span that acts outside itself (``dataflow.effects``);
 nor is a banner that opens with a value verb (``_VALUE_VERBS``). Whatever the
-source, a name a symbol in the helper's scope already uses is dropped. Without
-any of them, or when each is taken, the helper is named for its host function
-and the span's subject (:mod:`.span_subject`), so every plan carries a name to
-edit rather than a blank.
+source, a name a symbol in the helper's scope already uses is dropped.
+
+Between the banner and ``compute_<out>`` comes what the span's key call does
+(:func:`.span_subject.actions`): ``self.addons.load_settings(...)`` names a
+span ``load_settings``, and a value bound from a call takes that call's verb
+(``get_tokens`` over ``compute_tokens``). The verb is the call's own first
+word, read against a fixed English list, never the repository's vocabulary.
+Without any of them, or when each is taken, the helper is named for its host
+function and the span's subject (:mod:`.span_subject`), so every plan carries a
+name to edit rather than a blank.
 """
 
 from __future__ import annotations
@@ -29,7 +35,7 @@ from ..dataflow.effects import (
 )
 from ..dataflow.span import enclosing_with, section_heads, span_statements
 from .naming import banner_words, join_identifier, label_words, split_words
-from .span_subject import host_words, subjects
+from .span_subject import actions, host_words, is_verb, subjects
 
 if TYPE_CHECKING:
     from ..complexity.languages import LanguageNodeMap
@@ -135,25 +141,42 @@ def helper_names(
     *,
     sections: bool = False,
 ) -> Iterator[str]:
-    """Starting names, best first: :func:`helper_name`, then the host function
-    qualified by each subject of the span (``render_card_directive``). Lazy, so
-    the subjects are read only when the anchored name is missing or taken.
-    *sections* as for :func:`helper_name`."""
+    """Starting names, best first: a label or banner (:func:`helper_name`),
+    then what the span's key calls do (:func:`span_subject.actions`,
+    ``load_settings``), then ``compute_<out>``, then the host function
+    qualified by each subject of the span (``render_card_directive``). Lazy,
+    so later sources are read only when the earlier names are missing or
+    taken. *sections* as for :func:`helper_name`."""
     anchored = helper_name(analysis, extraction, lmap, language, modules, sections=sections)
-    if anchored:
+    # A value name loses to the call producing the value: ``get_tokens`` over
+    # ``compute_tokens``.
+    computed = anchored is not None and anchored == out_value_name(analysis, extraction, language)
+    if anchored and not computed:
         yield anchored
     stmts = span_statements(analysis.fn_node, extraction.start_line, extraction.end_line, lmap)
+    for words in actions(stmts, extraction.returns, lmap):
+        yield join_identifier(words, _convention(language))
+    if computed:
+        yield anchored
     host = host_words(analysis.name) or ["handle"]
     for subject in subjects(stmts, extraction.returns, lmap):
         # ``render_card`` about ``card`` is ``render_card``: the host's own name.
         rest = subject[_overlap(host, subject) :]
         if rest:
-            yield join_identifier([*host, *rest], _convention(language))
+            yield join_identifier(_qualified(host, rest), _convention(language))
     # A span with no subject (it only logs, say) is still a block of the host;
     # numbered when that is taken too, so every plan ends with a free name.
     yield join_identifier([*host, "block"], _convention(language))
     for n in itertools.count(2):
         yield join_identifier([*host, "block", str(n)], _convention(language))
+
+
+def _qualified(host: list[str], rest: list[str]) -> list[str]:
+    """*host* qualified by *rest*; past ``_MAX_JOINED_WORDS`` the host keeps
+    only its verb, so a long host does not turn the name into a sentence
+    (``collect_findings`` + ``pre_normalization`` -> ``collect_pre_normalization``)."""
+    words = [*host, *rest]
+    return [host[0], *rest] if len(words) > _MAX_JOINED_WORDS and is_verb(host[0]) else words
 
 
 def _overlap(host: list[str], subject: list[str]) -> int:

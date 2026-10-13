@@ -733,3 +733,96 @@ def test_a_numbered_block_name_follows_when_every_candidate_is_taken():
     assert names.claim_first(fn, helper_names(fn, extraction, lmap, "python")) == (
         "report_block_3"
     )
+
+
+# -- what the span's key calls do --------------------------------------------------
+
+
+def test_a_dropped_method_call_names_the_span():
+    src = """
+    def crawl(self, settings):
+        self.addons.load_settings(settings)
+        self.stats = make_stats(settings)
+        return self.stats
+    """
+    assert _span_names("python", "py", src, 2, 3)[0] == "load_settings"
+
+
+def test_a_one_word_call_takes_its_argument_and_a_flag_target_is_skipped():
+    src = """
+    def check_password(password, encoded):
+        hasher = pick(encoded)
+        is_correct = hasher.verify(password, encoded)
+        return is_correct
+    """
+    assert _span_names("python", "py", src, 2, 3)[0] == "verify_password"
+
+
+def test_the_out_value_takes_the_verb_of_the_call_binding_it():
+    src = """
+    def tokenize(content):
+        content = content.strip()
+        tokens = list(parse(content))
+        return tokens
+    """
+    names = _span_names("python", "py", src, 2, 3, ["tokens"])
+    # The call producing the value beats ``compute_tokens``.
+    assert names[:2] == ["parse_tokens", "compute_tokens"]
+
+
+def test_a_free_function_never_names_its_own_caller():
+    src = """
+    def login(request):
+        backends = get_backends(request)
+        launch_job(request)
+        return backends
+    """
+    # ``get_backends`` and ``launch_job`` would shadow the functions the helper calls.
+    assert _span_names("python", "py", src, 2, 3)[0] == "login_backends"
+
+
+def test_constructors_string_methods_and_bookkeeping_calls_do_not_name_the_span():
+    src = """
+    def ingest(builder, name, session):
+        clean = name.strip()
+        resolver = Resolver(clean)
+        session.commit()
+        builder.set_resolver(resolver)
+    """
+    assert _span_names("python", "py", src, 2, 5)[:2] == ["set_resolver", "commit_session"]
+
+
+def test_a_ts_span_is_named_for_its_awaited_call_in_camel_case():
+    src = """
+    async function readSuiteCount(summaryPath: string): Promise<number> {
+        let summaryText: string;
+        try {
+            summaryText = await fs.readFile(summaryPath, "utf8");
+        } catch (error) {
+            throw error;
+        }
+        return summaryText.length;
+    }
+    """
+    assert _span_names("typescript", "ts", src, 2, 7)[0] == "readSummaryText"
+
+
+def test_a_ts_bound_participle_drops_the_verbs_stem():
+    src = """
+    function collectFindings(tools: Tool[]): Finding[] {
+        const found: Finding[] = [];
+        const normalizedTools = normalizeAgentTools(tools);
+        found.push(...normalizedTools.map(toFinding));
+        return found;
+    }
+    """
+    assert _span_names("typescript", "ts", src, 3, 4)[0] == "normalizeTools"
+
+
+def test_a_long_host_keeps_only_its_verb_before_the_subject():
+    src = """
+    def collect_agent_runtime_tool_schema_findings(tools):
+        for tool in tools:
+            print(tool)
+    """
+    assert _span_names("python", "py", src, 2, 3)[0] == "collect_tools"
