@@ -1909,26 +1909,37 @@ class CallResolver(LanguageStrategiesMixin, ReceiverTypingMixin):
         single superclass chain overrides the rest, so it answers before the
         uniqueness check over every ancestor.
         """
-        node, seen = class_id, {class_id}
-        while class_chain_first:
-            parents = [
-                p
-                for p in self._heritage_parents.get(node, ())
-                if getattr(self._symbols_by_id.get(p), "kind", None) == "class"
-            ]
-            if len(parents) != 1 or parents[0] in seen:
-                break
-            seen.add(parents[0])
-            node = parents[0]
-            sym_id = self._declares(node, method_name)
-            if sym_id is not None:
-                return None if sym_id == caller_id else sym_id
+        if class_chain_first:
+            nearest = self._superclass_chain_method(class_id, method_name)
+            if nearest is not None:
+                return None if nearest == caller_id else nearest
         hits = set()
         for ancestor in self._ancestors_of(class_id):
             sym_id = self._declares(ancestor, method_name)
             if sym_id is not None and sym_id != caller_id:
                 hits.add(sym_id)
         return next(iter(hits)) if len(hits) == 1 else None
+
+    def _superclass_chain_method(self, class_id: str, method_name: str) -> str | None:
+        """The nearest declaration of *method_name* up the single superclass chain.
+
+        The walk stops where a type has no class parent, more than one, or
+        one already seen.
+        """
+        node, seen = class_id, {class_id}
+        while True:
+            parents = [
+                p
+                for p in self._heritage_parents.get(node, ())
+                if getattr(self._symbols_by_id.get(p), "kind", None) == "class"
+            ]
+            if len(parents) != 1 or parents[0] in seen:
+                return None
+            seen.add(parents[0])
+            node = parents[0]
+            sym_id = self._declares(node, method_name)
+            if sym_id is not None:
+                return sym_id
 
     def _declares(self, class_id: str, method_name: str) -> str | None:
         """The symbol a type node declares under *method_name*, or None.

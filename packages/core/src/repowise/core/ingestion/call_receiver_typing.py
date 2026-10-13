@@ -148,6 +148,21 @@ def _types_by_name(parsed: ParsedFile) -> dict[str, list[str]]:
     return by_name
 
 
+def _header_type_parameters(header: str) -> set[str]:
+    """The names a Java declaration header's ``<...>`` list declares."""
+    opened = _JAVA_TYPE_PARAMETERS.search(header)
+    if opened is None:
+        return set()
+    depth, close = 1, opened.end()
+    while close < len(header) and depth:
+        depth += {"<": 1, ">": -1}.get(header[close], 0)
+        close += 1
+    names: set[str] = set()
+    for param in strip_type_arguments(header[opened.end() : close - 1]).split(","):
+        names.update(param.split()[:1])
+    return names
+
+
 class ReceiverTypingMixin:
     """Typed-receiver and C# extension strategies, with the source caches they read."""
 
@@ -317,15 +332,7 @@ class ReceiverTypingMixin:
             if symbol.kind not in _TYPE_KINDS and symbol.kind not in _FUNCTION_KINDS:
                 continue
             header = "\n".join(lines[start - 1 : end]).partition("{")[0]
-            opened = _JAVA_TYPE_PARAMETERS.search(header)
-            if opened is None:
-                continue
-            depth, close = 1, opened.end()
-            while close < len(header) and depth:
-                depth += {"<": 1, ">": -1}.get(header[close], 0)
-                close += 1
-            for param in strip_type_arguments(header[opened.end() : close - 1]).split(","):
-                names.update(param.split()[:1])
+            names.update(_header_type_parameters(header))
         return names
 
     def _typed_receiver_lookup(
