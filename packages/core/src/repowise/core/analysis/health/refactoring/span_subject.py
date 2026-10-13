@@ -330,7 +330,7 @@ def _key_call(stmt: Any, lmap: LanguageNodeMap) -> _KeyCall | None:
         args=_first_argument(value) is not None,
         bound=names[0] if len(names) == 1 else None,
         target=_words(names[0]) if len(names) == 1 else _expr_words(target, 0),
-        noun=next((w for c in (_first_argument(value), receiver) if (w := _expr_words(c, 0))), []),
+        noun=next((w for c in (_first_argument(value), receiver) if (w := _expr_words(_plain(c), 0))), []),
     )
 
 
@@ -341,6 +341,16 @@ def _called(call: Any) -> tuple[str, Any]:
     if member is None:
         return _node_text(callee), None
     return _node_text(member), _child(callee, ("object", "value"))
+
+
+def _plain(node: Any) -> Any:
+    """*node* without the string methods called on it: ``text.strip()`` is ``text``."""
+    while node is not None and node.type in ("call", "call_expression"):
+        called, receiver = _called(node)
+        if receiver is None or "_".join(split_words(called)) not in _STRING_OPS:
+            break
+        node = receiver
+    return node
 
 
 def _unwrap(node: Any, lmap: LanguageNodeMap) -> Any:
