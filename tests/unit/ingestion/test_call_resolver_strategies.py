@@ -1323,64 +1323,122 @@ class TestForeignReceiverTypes:
 class TestInheritedTypedReceiver:
     """A typed receiver whose type lacks the method reaches the one ancestor declaring it."""
 
+    _PKG = "src/org/acme/"
     _BASE = (
         "package org.acme;\npublic class Base {\n"
         "    public Object get(int i) { return null; }\n}\n"
     )
-    _CALLER = (
-        "package org.acme;\npublic class Caller {\n"
-        "    public Object run(Child c) {\n        return c.get(0);\n    }\n}\n"
-    )
+    _CHILD = "package org.acme;\npublic class Child extends Base {}\n"
+    _GET = "src/org/acme/Base.java::Base::get"
 
     @staticmethod
-    def _caller_edges(
-        tmp_path: Path, files: dict[str, tuple[str, str]], parents: set[str]
-    ) -> list[tuple[str, str, float, str]]:
-        """Edges out of ``Caller``, with ``Child`` given *parents* (no heritage phase runs)."""
-        parsed = _parse_all(tmp_path, files)
-        child = next(p for p in files if "/Child." in p) + "::Child"
+    def _caller(head: str = "package org.acme;\n", cls: str = "Caller", method: str = "") -> str:
+        return (
+            f"{head}public class {cls} {{\n"
+            f"    public {method}Object run(Child c) {{\n        return c.get(0);\n    }}\n}}\n"
+        )
+
+    def _targets(
+        self,
+        tmp_path: Path,
+        files: dict[str, str],
+        parents: dict[str, set[str]] | None = None,
+        language: str = "java",
+    ) -> list[str]:
+        """Callees of ``Caller``'s calls; *parents* stands in for the heritage phase.
+
+        A Java file with no ``package`` line is put in ``org.acme``.
+        """
+        if language == "java":
+            files = {"Base.java": self._BASE, "Child.java": self._CHILD, **files}
+            files = {
+                k: v if v.startswith("package") else "package org.acme;\n" + v
+                for k, v in files.items()
+            }
+        parsed = _parse_all(tmp_path, {k: (language, v) for k, v in files.items()})
+        _link_imports(parsed, {k: {"org.acme.Child": "Child.java"} for k in parsed})
         resolver = CallResolver(
             parsed,
-            {p: set() for p in parsed},
+            {k: set() for k in parsed},
             repo_path=str(tmp_path),
-            heritage_parents={child: parents},
+            heritage_parents=parents or {"Child.java::Child": {"Base.java::Base"}},
         )
-        caller = next(p for p in files if "/Caller." in p)
-        return [
-            (rc.caller_id, rc.callee_id, rc.confidence, rc.origin)
-            for rc in resolver.resolve_file(caller, parsed[caller].calls)
-        ]
-
-    def _java(self, **files: str) -> dict[str, tuple[str, str]]:
-        files = {"Base.java": self._BASE, **files, "Caller.java": self._CALLER}
-        return {f"src/org/acme/{k}": ("java", v) for k, v in files.items()}
+        caller = next(k for k in files if "Caller" in k)
+        return [rc.callee_id for rc in resolver.resolve_file(caller, parsed[caller].calls)]
 
     def test_an_inherited_method_resolves_to_the_ancestor(self, tmp_path: Path) -> None:
-        child = "package org.acme;\npublic class Child extends Base {}\n"
-        files = self._java(**{"Child.java": child})
-        assert self._caller_edges(tmp_path, files, {"src/org/acme/Base.java::Base"}) == [
-            (
-                "src/org/acme/Caller.java::Caller::run",
-                "src/org/acme/Base.java::Base::get",
-                0.75,
-                "receiver_typed_global",
-            )
-        ]
+        files = {"Base.java": self._BASE, "Child.java": self._CHILD, "Caller.java": self._caller()}
+        parsed = _parse_all(tmp_path, {self._PKG + k: ("java", v) for k, v in files.items()})
+        resolver = CallResolver(
+            parsed,
+            {k: set() for k in parsed},
+            repo_path=str(tmp_path),
+            heritage_parents={self._PKG + "Child.java::Child": {self._PKG + "Base.java::Base"}},
+        )
+        caller = self._PKG + "Caller.java"
+        assert [
+            (rc.caller_id, rc.callee_id, rc.confidence, rc.origin)
+            for rc in resolver.resolve_file(caller, parsed[caller].calls)
+        ] == [(caller + "::Caller::run", self._GET, 0.75, "receiver_typed_global")]
 
-    def test_two_declaring_ancestors_give_no_edge(self, tmp_path: Path) -> None:
-        iface = "package org.acme;\npublic interface Getter {\n    Object get(int i);\n}\n"
-        child = "package org.acme;\npublic class Child extends Base implements Getter {}\n"
-        files = self._java(**{"Getter.java": iface, "Child.java": child})
-        parents = {"src/org/acme/Base.java::Base", "src/org/acme/Getter.java::Getter"}
-        assert self._caller_edges(tmp_path, files, parents) == []
+    def test_the_nearest_superclass_declaration_wins(self, tmp_path: Path) -> None:
+        mid = "public class Mid extends Base {\n    public Object get(int i) { return 1; }\n}\n"
+        iface = "public interface Getter {\n    Object get(int i);\n}\n"
+        child = "public class Child extends Mid implements Getter {}\n"
+        parents = {
+            "Child.java::Child": {"Mid.java::Mid", "Getter.java::Getter"},
+            "Mid.java::Mid": {"Base.java::Base"},
+        }
+        files = {"Mid.java": mid, "Getter.java": iface, "Child.java": child}
+        files["Caller.java"] = self._caller("")
+        assert self._targets(tmp_path, files, parents) == ["Mid.java::Mid::get"]
+
+    def test_two_declaring_interfaces_give_no_edge(self, tmp_path: Path) -> None:
+        files = {
+            "A.java": "public interface A {\n    Object get(int i);\n}\n",
+            "B.java": "public interface B {\n    Object get(int i);\n}\n",
+            "Child.java": "public interface Child extends A, B {}\n",
+            "Caller.java": self._caller(""),
+        }
+        parents = {"Child.java::Child": {"A.java::A", "B.java::B"}}
+        assert self._targets(tmp_path, files, parents) == []
+
+    @pytest.mark.parametrize(
+        "head",
+        [
+            pytest.param("package q;\nimport com.vendor.*;\n", id="vendor-wildcard"),
+            pytest.param("package q;\n", id="other-package-no-import"),
+        ],
+    )
+    def test_a_type_the_caller_cannot_see_gives_no_edge(self, tmp_path: Path, head: str) -> None:
+        base = "package p;\n" + self._BASE.partition("\n")[2]
+        child = "package p;\n" + self._CHILD.partition("\n")[2]
+        files = {"Base.java": base, "Child.java": child, "Caller.java": self._caller(head)}
+        assert self._targets(tmp_path, files) == []
+
+    def test_a_single_type_import_makes_it_visible(self, tmp_path: Path) -> None:
+        files = {"Caller.java": self._caller("package q;\nimport org.acme.Child;\n")}
+        assert self._targets(tmp_path, files) == ["Base.java::Base::get"]
+
+    @pytest.mark.parametrize(
+        ("cls", "method"),
+        [("Caller<Child>", ""), ("Caller", "<Child extends Comparable<Child>> ")],
+        ids=["class-parameter", "method-parameter"],
+    )
+    def test_a_type_parameter_shadows_the_repo_type(
+        self, tmp_path: Path, cls: str, method: str
+    ) -> None:
+        files = {"Caller.java": self._caller("", cls, method)}
+        assert self._targets(tmp_path, files) == []
 
     def test_kotlin_does_not_walk_ancestors(self, tmp_path: Path) -> None:
         files = {
-            "src/Base.kt": ("kotlin", "open class Base {\n    fun get(i: Int): Any? = null\n}\n"),
-            "src/Child.kt": ("kotlin", "class Child : Base()\n"),
-            "src/Caller.kt": ("kotlin", "fun run(c: Child): Any? {\n    return c.get(0)\n}\n"),
+            "Base.kt": "open class Base {\n    fun get(i: Int): Any? = null\n}\n",
+            "Child.kt": "class Child : Base()\n",
+            "Caller.kt": "fun run(c: Child): Any? {\n    return c.get(0)\n}\n",
         }
-        assert self._caller_edges(tmp_path, files, {"src/Base.kt::Base"}) == []
+        parents = {"Child.kt::Child": {"Base.kt::Base"}}
+        assert self._targets(tmp_path, files, parents, language="kotlin") == []
 
 
 class TestOwnerAwareModuleTier:

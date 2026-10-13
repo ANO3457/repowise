@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import posixpath
+import re
 from bisect import bisect_left, bisect_right
 from dataclasses import replace
 from pathlib import Path
@@ -44,7 +45,12 @@ from .models import CallSite, NamedBinding, ParsedFile, Symbol, symbol_id_langua
 from .resolved_call import ResolvedCall
 from .return_types import declared_return_type, go_first_result
 from .symbol_identity import id_segment_name
-from .type_names import POINTER_LIKE_MEMBERS, bare_type_name, type_qualifier
+from .type_names import (
+    POINTER_LIKE_MEMBERS,
+    bare_type_name,
+    strip_type_arguments,
+    type_qualifier,
+)
 
 # Which symbols own a class scope, and which of them swallow one. A class span
 # contains every method body inside it, so both sets are needed to tell a field
@@ -53,6 +59,14 @@ _TYPE_KINDS = frozenset({"class", "struct", "interface", "enum", "trait", "impl"
 _FUNCTION_KINDS = frozenset({"function", "method"})
 
 _SOURCE_CACHE_FILES = 4
+
+# Where a Java declaration header opens its type-parameter list: after a type's
+# name, or after a method's modifiers and annotations, before its return type.
+_JAVA_TYPE_PARAMETERS = re.compile(
+    r"\b(?:class|interface|record)\s+\w+\s*<"
+    r"|^(?:\s*(?:@[\w.]+(?:\([^)]*\))?|public|protected|private|static|final|abstract"
+    r"|synchronized|native|default|strictfp)\b)*\s*<"
+)
 
 # Languages whose grammar mints ``a.b.c.m()`` with the dotted path as its
 # receiver, every segment after the head a field. Each maps to the name that
@@ -257,19 +271,62 @@ class ReceiverTypingMixin:
         """The one ancestor method a typed receiver reaches when its type lacks it.
 
         The type is the repository's only declaration of *bare*, the repo-wide
-        tier's evidence, so the answer is scoped ``global``. A type that
-        declares the method itself was refused above for a reason this keeps.
+        tier's evidence, so the answer is scoped ``global``, and only when the
+        caller can see it and no type parameter or import shadows it. A type
+        that declares the method itself was refused above for a reason this
+        keeps.
         """
         if bare in self._externally_bound_names(file_path):
             return None
         declared = self._declared_types_named(bare)
-        if len(declared) != 1:
+        if len(declared) != 1 or bare in self._java_type_parameters(file_path, caller_id):
             return None
-        type_id = declared[0][1][0]
+        type_file, (type_id, *_), _ = declared[0]
+        if not self._visible_java_type(file_path, bare, type_file):
+            return None
         if self._declares(type_id, call.target_name) is not None:
             return None
-        hit = self._ancestor_method(type_id, call.target_name, caller_id)
+        hit = self._ancestor_method(type_id, call.target_name, caller_id, class_chain_first=True)
         return None if hit is None else (hit, "global")
+
+    def _visible_java_type(self, file_path: str, bare: str, type_file: str) -> bool:
+        """Whether Java lets *file_path* write *bare* for the type in *type_file*.
+
+        Its own file, its package, or a single-type import of that file. A
+        wildcard import is not enough: the name may be another package's.
+        """
+        if type_file == file_path or self._import_names.get(file_path, {}).get(bare) == type_file:
+            return True
+        index = self._get_jvm_index()
+        return index is not None and type_file in index.same_package_files(file_path)
+
+    def _java_type_parameters(self, file_path: str, caller_id: str) -> set[str]:
+        """Type parameters the caller and its enclosing types declare.
+
+        Read off each declaration header, up to its body's ``{``, since no
+        parsed symbol keeps its ``<...>`` list.
+        """
+        spans = self._spans_for(file_path)
+        line = spans.get(caller_id, (0, 0))[0]
+        lines = self._text_of(file_path).splitlines()
+        names: set[str] = set()
+        for sym_id, (start, end) in spans.items():
+            symbol = self._symbols_by_id.get(sym_id)
+            if not (start <= line <= end and symbol is not None):
+                continue
+            if symbol.kind not in _TYPE_KINDS and symbol.kind not in _FUNCTION_KINDS:
+                continue
+            header = "\n".join(lines[start - 1 : end]).partition("{")[0]
+            opened = _JAVA_TYPE_PARAMETERS.search(header)
+            if opened is None:
+                continue
+            depth, close = 1, opened.end()
+            while close < len(header) and depth:
+                depth += {"<": 1, ">": -1}.get(header[close], 0)
+                close += 1
+            for param in strip_type_arguments(header[opened.end() : close - 1]).split(","):
+                names.update(param.split()[:1])
+        return names
 
     def _typed_receiver_lookup(
         self,

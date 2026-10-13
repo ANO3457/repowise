@@ -1900,8 +1900,29 @@ class CallResolver(LanguageStrategiesMixin, ReceiverTypingMixin):
             return None
         return self._ancestor_method(class_id, method_name, caller_id)
 
-    def _ancestor_method(self, class_id: str, method_name: str, caller_id: str) -> str | None:
-        """The one method of this name *class_id*'s ancestors declare, never the caller."""
+    def _ancestor_method(
+        self, class_id: str, method_name: str, caller_id: str, *, class_chain_first: bool = False
+    ) -> str | None:
+        """The one method of this name *class_id*'s ancestors declare, never the caller.
+
+        With *class_chain_first*, Java's rule: the nearest declaration up the
+        single superclass chain overrides the rest, so it answers before the
+        uniqueness check over every ancestor.
+        """
+        node, seen = class_id, {class_id}
+        while class_chain_first:
+            parents = [
+                p
+                for p in self._heritage_parents.get(node, ())
+                if getattr(self._symbols_by_id.get(p), "kind", None) == "class"
+            ]
+            if len(parents) != 1 or parents[0] in seen:
+                break
+            seen.add(parents[0])
+            node = parents[0]
+            sym_id = self._declares(node, method_name)
+            if sym_id is not None:
+                return None if sym_id == caller_id else sym_id
         hits = set()
         for ancestor in self._ancestors_of(class_id):
             sym_id = self._declares(ancestor, method_name)
