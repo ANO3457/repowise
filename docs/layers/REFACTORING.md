@@ -156,11 +156,10 @@ Fix first item leaves it out and says how many steps it held back; the full plan
 keeps them. Code only moves within a language family,
 so Java, Kotlin and Scala are separate. A callback is named after the call it is
 passed to. An Extract Method helper is named from a stage label or a banner
-comment, then from what the span's main call does, such as `load_settings` or
-`verify_password`, then `compute_<value>` when the span has no outside effects;
-otherwise it is the host function's name plus what the span handles, such as
-`render_card_directive`, with a long host name cut to its verb. A name already
-taken where the helper lands is skipped for the next candidate.
+comment, then from what the span's main call does (`load_settings`), then
+`compute_<value>` when the span has no outside effects; otherwise it is the host
+function's name plus what the span handles, such as `render_card_directive`. A
+name already taken where the helper lands is skipped for the next candidate.
 
 An empty list means no detector found work that clears its gates. It does not mean
 the code needs no attention: check the findings in

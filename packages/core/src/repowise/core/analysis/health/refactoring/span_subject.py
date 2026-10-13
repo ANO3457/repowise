@@ -13,16 +13,10 @@ key or compared literal, else the last name read), a loop's iterable, the
 first name a statement binds, or a dropped call's name. Role words (``result``,
 ``self``) and one-letter names say nothing and are skipped.
 
-What the span does (:func:`actions`), read before any of that: the call each
-top-level statement makes (a ``try`` or ``with`` read through to its body),
-when its name opens with a verb. A span with one product (its single OUT
-value, or the name it ends by returning) is named for the last call binding
-it; otherwise calls run for their effect come first, then the last binding
-calls, and a one-word call without arguments (``session.commit()``) last. The
-noun is the bound name, else the rest of the call's name, else, for a one-word
-call, its argument or receiver: ``is_correct = hasher.verify(password)`` is
-``verify_password``. Constructors, string methods and calls that pass a value
-on (``list(...)``) are read through or skipped.
+What the span does (:func:`actions`) is read first: the call a top-level
+statement makes, when its name opens with a verb. Its own words name it
+(``load_settings``); a one-word call adds what it binds or reads
+(``verify_password``). The span's single product picks the call.
 """
 
 from __future__ import annotations
@@ -64,32 +58,34 @@ _LOOP_SOURCE_FIELDS = ("right", "value", "iterable", "condition")
 _VALUE_FIELDS = ("right", "value")
 _PLAIN_NAME = re.compile(r"[A-Za-z_$][\w$]*")
 _MAX_DEPTH = 8
-# A fixed English list, never read from the repository: a call whose name
-# opens with one of these says what the span does (``load_settings``).
+# A fixed English list, never read from the repository: words that head a
+# function name as a verb far more often than as a noun (``list``, ``match``,
+# ``record`` head nouns as often, so they are out).
 _VERBS = frozenset(
     {"get", "set", "read", "write", "load", "save", "parse", "format", "build", "make"}
-    | {"create", "init", "compute", "calculate", "resolve", "find", "fetch", "update", "add"}
-    | {"remove", "delete", "clear", "reset", "apply", "check", "validate", "verify", "ensure"}
-    | {"normalize", "convert", "collect", "gather", "filter", "sort", "merge", "split", "join"}
-    | {"render", "send", "post", "open", "close", "start", "stop", "run", "execute", "handle"}
-    | {"process", "register", "install", "import", "export", "extract", "insert", "upsert"}
-    | {"prepare", "setup", "configure", "attach", "detach", "bind", "encode", "decode"}
-    | {"serialize", "deserialize", "compile", "generate", "transform", "expand", "scan"}
-    | {"match", "search", "lookup", "select", "pick", "wrap", "unwrap", "strip", "sanitize"}
-    | {"escape", "copy", "clone", "move", "rename", "replace", "patch", "schedule", "refresh"}
-    | {"sync", "flush", "commit", "dispatch", "notify", "publish", "subscribe", "watch", "poll"}
-    | {"wait", "retry", "track", "record", "count", "measure", "estimate", "compare", "emit"}
-    | {"spawn", "launch", "cancel", "abort", "enable", "disable", "toggle", "mark", "describe"}
-    | {"summarize", "report", "show", "hide", "draw", "mount", "connect", "disconnect"}
-    | {"authenticate", "authorize", "download", "upload", "store", "cache", "persist"}
-    | {"restore", "infer", "detect", "identify", "classify", "score", "rank", "group"}
-    | {"partition", "chunk", "batch", "walk", "visit", "traverse", "list", "fill", "guess"}
-    | {"derive", "assign", "allocate", "release", "acquire", "lock", "unlock", "drain"}
-    | {"decorate", "inject", "evaluate", "invoke", "request", "query", "dump", "inspect"}
-    | {"diff", "prune", "trim", "truncate", "harden", "hash", "sign", "encrypt", "decrypt"}
-    | {"compress", "decompress", "migrate", "upgrade", "rebuild", "clean", "warn", "complete"}
-    | {"rewrite", "discover", "consume", "produce", "attempt", "convert", "reload", "redact"}
+    | {"create", "init", "compute", "calculate", "calc", "resolve", "find", "fetch", "update"}
+    | {"add", "remove", "delete", "clear", "reset", "apply", "check", "validate", "verify"}
+    | {"ensure", "normalize", "convert", "collect", "gather", "filter", "sort", "merge", "split"}
+    | {"join", "render", "send", "open", "close", "start", "stop", "run", "execute", "handle"}
+    | {"register", "install", "import", "export", "extract", "insert", "upsert", "prepare"}
+    | {"configure", "attach", "detach", "bind", "encode", "decode", "serialize", "deserialize"}
+    | {"compile", "generate", "transform", "expand", "scan", "search", "select", "pick", "wrap"}
+    | {"unwrap", "strip", "sanitize", "escape", "copy", "clone", "move", "rename", "replace"}
+    | {"refresh", "sync", "flush", "dispatch", "notify", "publish", "subscribe", "poll", "wait"}
+    | {"retry", "track", "measure", "estimate", "compare", "emit", "spawn", "launch", "cancel"}
+    | {"abort", "enable", "disable", "toggle", "describe", "summarize", "show", "hide", "draw"}
+    | {"mount", "connect", "disconnect", "authenticate", "authorize", "download", "upload"}
+    | {"persist", "restore", "infer", "detect", "identify", "classify", "partition", "walk"}
+    | {"visit", "traverse", "fill", "derive", "assign", "allocate", "acquire", "unlock", "drain"}
+    | {"decorate", "inject", "evaluate", "invoke", "inspect", "prune", "trim", "truncate"}
+    | {"harden", "encrypt", "decrypt", "compress", "decompress", "migrate", "upgrade", "rebuild"}
+    | {"clean", "warn", "rewrite", "discover", "consume", "produce", "reload", "redact"}
 )
+# Verbs that promise a value; ``calc`` is in, as short for ``calculate``.
+VALUE_VERBS = frozenset({"compute", "calculate", "calc", "derive", "get", "build", "make"})
+# The receiver a method is called on when it is the host's own object: the
+# helper would sit beside, or override, the method it calls.
+_SELF_RECEIVERS = frozenset({"self", "this", "cls"})
 # A bound name that is a flag or a raw handle says how, not what:
 # ``is_correct = hasher.verify(password)`` is about ``password``.
 _FLAG_WORDS = frozenset({"is", "has", "should", "can", "did", "was", "raw", "res", "resp", "ok"})
@@ -224,10 +220,7 @@ def _call_words(call: Any, depth: int) -> list[str]:
     name = _callee_words(call, depth)
     if name and not _generic(name) and "_".join(name) not in _PASS_THROUGH:
         return name
-    callee = _child(call, _CALLEE_FIELDS)
-    args = call.child_by_field_name("arguments")
-    first = next((a for a in args.named_children if not is_comment(a)), None) if args else None
-    receiver = _child(callee, ("object", "value")) if callee is not None else None
+    first, receiver = _argument(call), _called(call)[1]
     return next((w for c in (first, receiver) if (w := _expr_words(c, depth + 1))), [])
 
 
@@ -243,14 +236,13 @@ def _literal_words(literal: Any) -> list[str]:
 
 @dataclass(frozen=True)
 class _KeyCall:
-    """A statement's call as naming reads it: the called name's words, whether
-    it is called on a receiver, whether its result is dropped, whether it
-    takes a positional argument, the one name it
-    binds the result to, the words of what it binds, and the subject of its
-    first argument or receiver."""
+    """A statement's call as naming reads it. ``free``: no receiver, or the
+    host's own, so its exact name would collide. ``bound``: the one name the
+    result is bound to; ``target`` and ``noun`` are the words a one-word call
+    takes."""
 
     callee: list[str]
-    method: bool
+    free: bool
     dropped: bool
     args: bool
     bound: str | None
@@ -314,7 +306,8 @@ def _key_call(stmt: Any, lmap: LanguageNodeMap) -> _KeyCall | None:
     (``list(...)``, ``out.append(...)``, ``name.strip()``) is read through or
     skipped."""
     expr = stmt.named_children[0] if stmt.named_child_count == 1 else stmt
-    binder = next((h for h in (expr, *expr.named_children) if binding_target(h, lmap) is not None), None)
+    holders = (expr, *expr.named_children)
+    binder = next((h for h in holders if binding_target(h, lmap) is not None), None)
     value = _unwrap(_child(binder, _VALUE_FIELDS) if binder is not None else expr, lmap)
     if value is None:
         return None
@@ -325,13 +318,27 @@ def _key_call(stmt: Any, lmap: LanguageNodeMap) -> _KeyCall | None:
     names = bound_names(target) if target is not None else []
     return _KeyCall(
         callee=split_words(name),
-        method=receiver is not None,
+        free=receiver is None or _node_text(receiver) in _SELF_RECEIVERS,
         dropped=binder is None and stmt.type not in lmap.return_kinds,
         args=_first_argument(value) is not None,
         bound=names[0] if len(names) == 1 else None,
-        target=_words(names[0]) if len(names) == 1 else _expr_words(target, 0),
-        noun=next((w for c in (_first_argument(value), receiver) if (w := _expr_words(_plain(c), 0))), []),
+        target=_target_words(target, names),
+        noun=_noun(value, receiver),
     )
+
+
+def _target_words(target: Any, names: list[str]) -> list[str]:
+    """What a binding binds: one name, or a field (``self.stats``); ``[]`` for
+    a destructuring (``a, b = f()``), which names no one thing."""
+    if len(names) == 1:
+        return _words(names[0])
+    return _expr_words(target, 0) if target is not None and not names else []
+
+
+def _noun(call: Any, receiver: Any) -> list[str]:
+    """The subject of *call*'s first argument, else of its receiver."""
+    parts = (_first_argument(call), receiver)
+    return next((w for c in parts if (w := _expr_words(_plain(c), 0))), [])
 
 
 def _called(call: Any) -> tuple[str, Any]:
@@ -377,33 +384,39 @@ def _unwrap(node: Any, lmap: LanguageNodeMap) -> Any:
     return None
 
 
+def _argument(call: Any) -> Any:
+    """*call*'s first argument, whatever it is."""
+    args = call.child_by_field_name("arguments")
+    return next((a for a in args.named_children if not is_comment(a)), None) if args else None
+
+
 def _first_argument(call: Any) -> Any:
     """The first positional argument, ``None`` for a keyword, object or callback."""
-    args = call.child_by_field_name("arguments")
-    first = next((a for a in args.named_children if not is_comment(a)), None) if args else None
+    first = _argument(call)
     return None if first is None or first.type in _NOT_A_SUBJECT else first
 
 
 def _action_words(call: _KeyCall) -> list[str]:
-    """Verb then noun for *call*, ``[]`` when its name opens with no verb. The
-    noun is what the call's result is bound to, else the rest of the call's
-    name, else (a one-word call: ``verify(password)``) its argument or
-    receiver. A free function's own name is never the answer: the helper would
-    shadow it."""
+    """Verb then noun for *call*, ``[]`` when its name opens with no verb.
+
+    A call's own words name it; a free one drops its first qualifier so the
+    helper does not take the name it calls. A one-word call adds the name it
+    binds, else its argument or receiver."""
     verb, rest = call.callee[0], call.callee[1:]
     if verb not in _VERBS:
         return []
-    target = call.target if call.target[:1] and call.target[0] not in _FLAG_WORDS else []
-    target = _drop_stem(verb, target)[-_MAX_NOUN_WORDS:]
-    for noun in (target, rest, [] if rest else call.noun[-_MAX_NOUN_WORDS:]):
-        if noun and (call.method or [verb, *noun] != call.callee):
-            return [verb, *noun]
-    return []
+    if rest:
+        noun = rest[1:] if call.free else rest
+        return [verb, *noun[-_MAX_NOUN_WORDS:]] if noun else []
+    target = [] if call.target[:1] and call.target[0] in _FLAG_WORDS else call.target
+    noun = _drop_stem(verb, target) or call.noun
+    return [verb, *noun[-_MAX_NOUN_WORDS:]] if noun else []
 
 
-def is_verb(word: str) -> bool:
-    """Whether *word* opens a name the way a verb does (``_VERBS``)."""
-    return word in _VERBS
+def action_verbs(stmts: list[Any], lmap: LanguageNodeMap) -> frozenset[str]:
+    """The verbs the span's key calls open with."""
+    calls = (_key_call(s, lmap) for s in _top_statements(stmts, lmap, 0))
+    return frozenset(c.callee[0] for c in calls if c is not None and c.callee[0] in _VERBS)
 
 
 def _drop_stem(verb: str, words: list[str]) -> list[str]:
@@ -415,4 +428,4 @@ def _node_text(node: Any) -> str:
     return (node.text or b"").decode("utf-8", "replace") if node is not None else ""
 
 
-__all__ = ["actions", "host_words", "is_verb", "subjects"]
+__all__ = ["VALUE_VERBS", "action_verbs", "actions", "host_words", "subjects"]

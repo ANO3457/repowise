@@ -789,7 +789,9 @@ def test_constructors_string_methods_and_bookkeeping_calls_do_not_name_the_span(
         session.commit()
         builder.set_resolver(resolver)
     """
-    assert _span_names("python", "py", src, 2, 5)[:2] == ["set_resolver", "commit_session"]
+    names = _span_names("python", "py", src, 2, 5)
+    assert names[0] == "set_resolver"
+    assert "commit_session" not in names
 
 
 def test_a_ts_span_is_named_for_its_awaited_call_in_camel_case():
@@ -804,7 +806,8 @@ def test_a_ts_span_is_named_for_its_awaited_call_in_camel_case():
         return summaryText.length;
     }
     """
-    assert _span_names("typescript", "ts", src, 2, 7)[0] == "readSummaryText"
+    # A method's own words name it; the bound name only completes a one-word call.
+    assert _span_names("typescript", "ts", src, 2, 7)[0] == "readFile"
 
 
 def test_a_ts_bound_participle_drops_the_verbs_stem():
@@ -819,10 +822,56 @@ def test_a_ts_bound_participle_drops_the_verbs_stem():
     assert _span_names("typescript", "ts", src, 3, 4)[0] == "normalizeTools"
 
 
-def test_a_long_host_keeps_only_its_verb_before_the_subject():
+def test_a_long_host_keeps_only_its_verb_when_the_span_calls_with_it():
+    src = """
+    def collect_agent_runtime_tool_schema_findings(tools):
+        for tool in tools:
+            print(tool)
+        collect_schemas(tools)
+    """
+    assert _span_names("python", "py", src, 2, 4)[0] == "collect_tools"
+
+
+def test_a_long_host_keeps_its_whole_name_when_the_span_does_not_use_its_verb():
     src = """
     def collect_agent_runtime_tool_schema_findings(tools):
         for tool in tools:
             print(tool)
     """
-    assert _span_names("python", "py", src, 2, 3)[0] == "collect_tools"
+    # The verb would come from the host, not the span: no shortening.
+    assert _span_names("python", "py", src, 2, 3)[0] == (
+        "collect_agent_runtime_tool_schema_findings_tools"
+    )
+
+
+def test_a_calls_own_words_beat_the_name_it_is_bound_to():
+    src = """
+    def show_skin(api):
+        current = get_active_skin_name()
+        data = api.fetch_user_profile()
+        print(current, data)
+    """
+    # A free function drops its first qualifier so the helper does not take its name.
+    assert _span_names("python", "py", src, 2, 2)[0] == "get_skin_name"
+    assert _span_names("python", "py", src, 3, 3)[0] == "fetch_user_profile"
+
+
+def test_a_method_on_the_hosts_own_object_is_not_named_after_itself():
+    src = """
+    class Crawler:
+        def crawl(self, settings):
+            self.load_settings(settings)
+            self.ready = True
+    """
+    # ``load_settings`` would sit beside, or override, the method it calls.
+    assert _span_names("python", "py", src, 2, 3)[0] == "crawl_load_settings"
+
+
+def test_a_destructuring_names_no_one_thing():
+    src = """
+    def head_of(line):
+        first, rest = parse(line)
+        return first, rest
+    """
+    # Neither ``first`` nor ``rest`` is what ``parse`` made: the argument is.
+    assert _span_names("python", "py", src, 2, 2)[0] == "parse_line"

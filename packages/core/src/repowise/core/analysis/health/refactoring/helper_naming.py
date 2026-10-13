@@ -4,17 +4,13 @@ Sources, in order: a ``timed(..., "label")`` stage label on the span, a banner
 comment over it (the author's own name for the block), and the span's single
 OUT value as ``compute_<out>``. An OUT name describes a value, not an action,
 so it is never given to a span that acts outside itself (``dataflow.effects``);
-nor is a banner that opens with a value verb (``_VALUE_VERBS``). Whatever the
+nor is a banner that opens with a value verb (``VALUE_VERBS``). Whatever the
 source, a name a symbol in the helper's scope already uses is dropped.
 
 Between the banner and ``compute_<out>`` comes what the span's key call does
-(:func:`.span_subject.actions`): ``self.addons.load_settings(...)`` names a
-span ``load_settings``, and a value bound from a call takes that call's verb
-(``get_tokens`` over ``compute_tokens``). The verb is the call's own first
-word, read against a fixed English list, never the repository's vocabulary.
-Without any of them, or when each is taken, the helper is named for its host
-function and the span's subject (:mod:`.span_subject`), so every plan carries a
-name to edit rather than a blank.
+(:func:`.span_subject.actions`), its verb from a fixed list, never the
+repository's vocabulary. Last, the host function qualified by the span's
+subject (:mod:`.span_subject`), so every plan carries a name to edit.
 """
 
 from __future__ import annotations
@@ -35,7 +31,7 @@ from ..dataflow.effects import (
 )
 from ..dataflow.span import enclosing_with, section_heads, span_statements
 from .naming import banner_words, join_identifier, label_words, split_words
-from .span_subject import actions, host_words, is_verb, subjects
+from .span_subject import VALUE_VERBS, action_verbs, actions, host_words, subjects
 
 if TYPE_CHECKING:
     from ..complexity.languages import LanguageNodeMap
@@ -64,10 +60,6 @@ NAME_CONVENTION: dict[str, str] = {
     "vue": "camelCase",
 }
 _SNAKE_CASE = "snake_case"
-
-# Verbs that promise a value. A banner opening with one over a span that acts
-# outside itself names it the way an OUT name would, wrongly.
-_VALUE_VERBS = frozenset({"compute", "calculate", "calc", "derive", "get", "build", "make"})
 
 # Past this a name joining several sections reads as a sentence, not a name.
 _MAX_JOINED_WORDS = 6
@@ -127,7 +119,7 @@ def helper_name(
         modules=modules,
     )
     effects = extraction.needs_async or has_outside_effects(stmts, own, lmap)
-    if words and not (effects and words[0] in _VALUE_VERBS):
+    if words and not (effects and words[0] in VALUE_VERBS):
         return join_identifier(words, _convention(language))
     return None if effects else out_value_name(analysis, extraction, language)
 
@@ -141,11 +133,8 @@ def helper_names(
     *,
     sections: bool = False,
 ) -> Iterator[str]:
-    """Starting names, best first: a label or banner (:func:`helper_name`),
-    then what the span's key calls do (:func:`span_subject.actions`,
-    ``load_settings``), then ``compute_<out>``, then the host function
-    qualified by each subject of the span (``render_card_directive``). Lazy,
-    so later sources are read only when the earlier names are missing or
+    """Starting names, best first, in the order the module docstring gives.
+    Lazy, so later sources are read only when earlier names are missing or
     taken. *sections* as for :func:`helper_name`."""
     anchored = helper_name(analysis, extraction, lmap, language, modules, sections=sections)
     # A value name loses to the call producing the value: ``get_tokens`` over
@@ -163,7 +152,7 @@ def helper_names(
         # ``render_card`` about ``card`` is ``render_card``: the host's own name.
         rest = subject[_overlap(host, subject) :]
         if rest:
-            yield join_identifier(_qualified(host, rest), _convention(language))
+            yield join_identifier(_qualified(host, rest, stmts, lmap), _convention(language))
     # A span with no subject (it only logs, say) is still a block of the host;
     # numbered when that is taken too, so every plan ends with a free name.
     yield join_identifier([*host, "block"], _convention(language))
@@ -171,12 +160,16 @@ def helper_names(
         yield join_identifier([*host, "block", str(n)], _convention(language))
 
 
-def _qualified(host: list[str], rest: list[str]) -> list[str]:
-    """*host* qualified by *rest*; past ``_MAX_JOINED_WORDS`` the host keeps
-    only its verb, so a long host does not turn the name into a sentence
-    (``collect_findings`` + ``pre_normalization`` -> ``collect_pre_normalization``)."""
+def _qualified(
+    host: list[str], rest: list[str], stmts: list[Any], lmap: LanguageNodeMap
+) -> list[str]:
+    """*host* qualified by *rest*. Past ``_MAX_JOINED_WORDS`` the host keeps
+    only its verb, when the span itself calls with that verb: the verb then
+    comes from the span, and the name stays a name, not a sentence."""
     words = [*host, *rest]
-    return [host[0], *rest] if len(words) > _MAX_JOINED_WORDS and is_verb(host[0]) else words
+    if len(words) > _MAX_JOINED_WORDS and host[0] in action_verbs(stmts, lmap):
+        return [host[0], *rest]
+    return words
 
 
 def _overlap(host: list[str], subject: list[str]) -> int:
