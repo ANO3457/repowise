@@ -60,7 +60,7 @@ work will *need*.
 | **Where the fix goes** | Paste a bug report or a stack trace and get the files, and the functions inside them, the fix will touch | `payments/retry.py`: fixed for a similar timeout bug |
 | **What the change forgot** | Mid-edit, before any commit message, the file that usually changes with yours and is missing from the diff | `billing/ledger.py`: changes with `retry.py` 9 of 11 times |
 | **What still holds the old name** | Rename or remove an identifier or a literal, and see the files that still reference it | `config/settings.py`: still references `SESSION_TTL` |
-| **Tests to update** | The test files that will need edits too, ranked, so the pull request arrives complete | `tests/test_retry.py`: moves with `retry.py` |
+| **Tests to update** | The test files that will need edits too, ranked, so the pull request arrives complete | `test_retry.py`: moves with `retry.py` |
 | **Code health that learns** | A health signal whose weights are learned from how real projects needed fixes | `payments/processor.py`: first in line for review |
 | **Confidence you can act on** | A calibrated band and the evidence behind every answer, so an agent or reviewer knows when to trust it | `likely`: 3 signals agree |
 
