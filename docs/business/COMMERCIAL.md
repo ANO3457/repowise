@@ -199,7 +199,7 @@ the items that matter most to you can be prioritized.
 | SBOM generation (CycloneDX) + VEX export + diffs | — | ✅ *(GA on hosted)* |
 | Compliance reporting (PCI-DSS / SOC 2) | — | ✅ *(GA on hosted, Teams)* |
 | Audit trail (in-product + JSON / CSV export + webhook stream) | — | ✅ *(GA on hosted, security surface)* |
-| Jira / Confluence integration | — | ✅ *(GA on hosted, Teams)* |
+| Jira / Confluence integration | — | ✅ *(beta on hosted, Teams)* |
 | GitLab.com repositories (connect, add projects, sync on push) | — | ✅ *(GA on hosted)* |
 | GitHub Enterprise / Azure DevOps / GitLab self-managed / Bitbucket | — | ✅ *(rolling out)* |
 | Slack / Teams security alerting (signed webhooks) | — | ✅ *(GA on hosted, Teams)* |
@@ -293,13 +293,13 @@ The plumbing these sit on (audit trail, RBAC, the commercial event bus) is in
 development. The connectors themselves are sequenced by customer demand; additional
 integrations beyond this list are available on request.
 
-- **Jira** *(available on the hosted platform, Teams+)*: architectural decisions
+- **Jira** *(beta on the hosted platform, Teams+)*: architectural decisions
   linked to the Jira issues that motivated them: links are mined from decision
   evidence commits (validated against the site's real project keys) or added
   manually by key, with live-ish status on the decision pages and in `get_why`,
   so AI agents see the originating ticket next to the rationale. Risk-finding
   links and PR-impact auto-comments on linked issues are on the roadmap.
-- **Confluence** *(available on the hosted platform, Teams+)*: scheduled (weekly
+- **Confluence** *(beta on the hosted platform, Teams+)*: scheduled (weekly
   or on-demand) publication of the Repowise wiki to a nominated space and parent
   page, updated in place and never duplicated; every page carries a link-back and
   a freshness banner stating the exact source commit, with an explicit stale

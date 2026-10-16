@@ -878,8 +878,8 @@ Any git host works, because indexing reads a local checkout. On top of that:
 | Status | Capability |
 |---|---|
 | **Shipping in open source** | Every deterministic layer, ten MCP tools, multi-repo workspaces, contract extraction and cross-repo blast radius, test intelligence, [architecture conformance](docs/scale/WORKSPACES.md#architecture-conformance), local dashboard, auto-sync, full-history secret scanning. Change Records with evidence and outcomes, local change policy with SARIF and JUnit, evidence packs, Backstage-shaped components with declared and active owners, package usage with CycloneDX export, scoped tokens for REST, MCP and webhooks, and plugin seams. |
-| **GA commercially** | Hosted GitHub and GitLab.com repositories, hosted graph-aware security, CVE prioritization, CycloneDX SBOM and VEX, PCI-DSS and SOC 2 control-coverage reports, audit export and webhook stream, Jira and Confluence, reference HA topology on your infrastructure, custom language extensions, SLA support, IP indemnification. |
-| **Rolling out** | Managed GitHub Enterprise, Azure DevOps, GitLab self-managed and Bitbucket integrations. SAML/OIDC SSO and SCIM. Engineering-leader dashboards. |
+| **GA commercially** | Hosted GitHub and GitLab.com repositories, hosted graph-aware security, CVE prioritization, CycloneDX SBOM and VEX, PCI-DSS and SOC 2 control-coverage reports, audit export and webhook stream, reference HA topology on your infrastructure, custom language extensions, SLA support, IP indemnification. |
+| **Rolling out** | Jira and Confluence (beta on hosted). Managed GitHub Enterprise, Azure DevOps, GitLab self-managed and Bitbucket integrations. SAML/OIDC SSO and SCIM. Engineering-leader dashboards. |
 | **Planned** | RBAC and multi-tenancy, a packaged air-gap install bundle, the Helm chart. |
 
 Repowise holds no SOC 2, ISO 27001 or other audited certification today. The SOC 2 and
