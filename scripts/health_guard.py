@@ -201,8 +201,11 @@ def main(argv: list[str] | None = None) -> int:
         print(line)
     text = summary(report)
     if text and (target := os.environ.get("GITHUB_STEP_SUMMARY")):
-        with open(target, "a", encoding="utf-8") as handle:
-            handle.write(text)
+        try:
+            with open(target, "a", encoding="utf-8") as handle:
+                handle.write(text)
+        except OSError as exc:
+            print(annotation("warning", f"Health guard could not write the job summary: {exc}"))
     return 0
 
 

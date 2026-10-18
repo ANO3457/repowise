@@ -125,3 +125,14 @@ def test_a_revspec_that_does_not_resolve_warns_and_passes(make_repo, capsys):
 
     assert guard.main(["--repo", str(repo.path), "--revspec", "nope...HEAD"]) == 0
     assert "::warning::Health guard did not run" in capsys.readouterr().out
+
+
+def test_an_unwritable_summary_warns_and_passes(make_repo, tmp_path, monkeypatch, capsys):
+    guard = _guard()
+    repo = make_repo()
+    base = repo.commit("seed", {"app.py": python_complex("small", 2)})
+    repo.commit("grow", {"app.py": python_complex("small", 2) + python_complex("tangle", 30)})
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(tmp_path))
+
+    assert guard.main(["--repo", str(repo.path), "--revspec", f"{base}..HEAD"]) == 0
+    assert "could not write the job summary" in capsys.readouterr().out
