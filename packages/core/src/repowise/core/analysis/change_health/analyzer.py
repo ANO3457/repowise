@@ -127,12 +127,12 @@ class RevisionHealthAnalyzer:
         parsed: list[ParsedFile] = []
         usable: dict[str, bytes] = {}
         for path, raw in sorted(sources.items()):
-            reason = self._reject(path, raw)
+            reason = self.reject_reason(path, raw)
             if reason is not None:
                 result.skipped[path] = reason
                 continue
             language = language_for(path)
-            assert language is not None  # _reject already screened this
+            assert language is not None  # reject_reason already screened this
             try:
                 parsed.append(parse_file(_file_info(path, language, raw), raw))
             except Exception:
@@ -142,7 +142,8 @@ class RevisionHealthAnalyzer:
         return parsed, usable
 
     @staticmethod
-    def _reject(path: str, raw: bytes) -> str | None:
+    def reject_reason(path: str, raw: bytes) -> str | None:
+        """Why the analyzer will not read *path*, else ``None``."""
         if language_for(path) is None:
             return "unsupported_language"
         if len(raw) > MAX_FILE_BYTES:

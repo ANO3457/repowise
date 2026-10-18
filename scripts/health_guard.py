@@ -78,9 +78,12 @@ def _functions(path: str, source: bytes | None) -> list:
     return walk_file_complexity(path, language, source)
 
 
-def new_large_functions(path: str, base: bytes | None, head: bytes) -> list[LargeFunction]:
+def new_large_functions(
+    path: str, head: bytes, base_path: str | None = None, base: bytes | None = None
+) -> list[LargeFunction]:
     """Head functions over a limit beyond the base's count of over-limit functions so named."""
-    budget = Counter(fn.name for fn in _functions(path, base) if _oversized(fn.ccn, fn.nloc))
+    old = _functions(base_path, base) if base_path else []
+    budget = Counter(fn.name for fn in old if _oversized(fn.ccn, fn.nloc))
     out: list[LargeFunction] = []
     for fn in _functions(path, head):
         if not _oversized(fn.ccn, fn.nloc):
@@ -99,10 +102,11 @@ class _Sides(NamedTuple):
     head_run: RevisionAnalysis
 
 
-def _analyze(source: GitRevisionSource, pair: RevisionPair, changes: list[FileChange]) -> _Sides:
+def _analyze(
+    source: GitRevisionSource, pair: RevisionPair, changes: list[FileChange], head_src: dict
+) -> _Sides:
     head_paths = [c.head_path for c in changes]
     base_paths = [c.base_path for c in changes if c.base_path]
-    head_src = source.read(pair.head_sha, head_paths)
     base_src = source.read(pair.base_sha, base_paths)
     analyzer = RevisionHealthAnalyzer(repo_root=source.repo_path)
     head_run = analyzer.analyze(head_src, subject_paths=set(head_paths))
@@ -118,20 +122,29 @@ def check(repo_path: str, revspec: str) -> GuardReport:
     source = GitRevisionSource(repo_path, hunks=False)
     pair = source.resolve(revspec)
     changes = [c for c in pair.changes if c.head_path and language_for(c.head_path)]
+    head_src = source.read(pair.head_sha, [c.head_path for c in changes])
+    # Files the analyzer rejects (generated, binary, oversized) never count toward the ceiling.
+    changes = [
+        c
+        for c in changes
+        if c.head_path in head_src
+        and RevisionHealthAnalyzer.reject_reason(c.head_path, head_src[c.head_path]) is None
+    ]
     if len(changes) > MAX_CHANGED_FILES:
         note = f"{len(changes)} changed files; the guard reads at most {MAX_CHANGED_FILES}."
         return GuardReport(note=note)
     if not changes:
         return GuardReport()
-    sides = _analyze(source, pair, changes)
+    sides = _analyze(source, pair, changes, head_src)
     report = GuardReport()
     for change in changes:
         head, base = change.head_path, change.base_path
-        # Generated, binary and oversized files never reach the analyzer; skip them here too.
         if head not in sides.head_run.analyzed:
             continue
-        base_bytes = sides.base_src.get(base) if base else None
-        report.functions += new_large_functions(head, base_bytes, sides.head_src[head])
+        # A base the analyzer rejected sets no budget, so it cannot hide a head function.
+        kept = base if base in sides.base_run.analyzed else None
+        old = sides.base_src.get(kept) if kept else None
+        report.functions += new_large_functions(head, sides.head_src[head], kept, old)
         before = _shape(sides.base_run, base) if base else None
         after = _shape(sides.head_run, head)
         if before is not None and after is not None and after < before - _DROP_EPSILON:

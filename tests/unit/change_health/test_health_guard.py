@@ -6,8 +6,9 @@ import importlib.util
 import sys
 from pathlib import Path
 
-from .conftest import python_complex
+from .conftest import python_complex, typescript_complex
 
+_GENERATED = "# @generated\n"
 _SCRIPT = Path(__file__).resolve().parents[3] / "scripts" / "health_guard.py"
 
 
@@ -136,3 +137,42 @@ def test_an_unwritable_summary_warns_and_passes(make_repo, tmp_path, monkeypatch
 
     assert guard.main(["--repo", str(repo.path), "--revspec", f"{base}..HEAD"]) == 0
     assert "could not write the job summary" in capsys.readouterr().out
+
+
+def test_a_cross_language_rename_reads_the_base_in_its_own_language():
+    guard = _guard()
+    base = python_complex("tangle", 30).encode()
+    head = typescript_complex("tangle", 30).encode()
+
+    assert guard.new_large_functions("tangle.ts", head, "tangle.py", base) == []
+
+
+def test_a_generated_base_sets_no_budget(make_repo):
+    guard = _guard()
+    repo = make_repo()
+    generated = _GENERATED + python_complex("tangle", 30)
+    base = repo.commit("seed", {"app.py": generated})
+    repo.commit("own", {"app.py": python_complex("tangle", 30)})
+
+    report = guard.check(str(repo.path), f"{base}..HEAD")
+
+    assert [f.name for f in report.functions] == ["tangle"]
+
+
+def test_rejected_files_do_not_count_toward_the_ceiling(make_repo, monkeypatch):
+    guard = _guard()
+    monkeypatch.setattr(guard, "MAX_CHANGED_FILES", 1)
+    repo = make_repo()
+    base = repo.commit("seed", {"app.py": python_complex("small", 2)})
+    repo.commit(
+        "add",
+        {
+            "gen.py": _GENERATED + python_complex("other", 30),
+            "app.py": python_complex("small", 2) + python_complex("tangle", 30),
+        },
+    )
+
+    report = guard.check(str(repo.path), f"{base}..HEAD")
+
+    assert report.note == ""
+    assert [f.name for f in report.functions] == ["tangle"]
