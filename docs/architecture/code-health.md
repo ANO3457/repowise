@@ -382,10 +382,10 @@ non-merge commits inside the window, and anchors the window to the index's
 `as_of` reference (the indexed commit's committer date): so scoring a historical T0
 checkout measures the fixes *before* T0, never leaking the post-T0 fixes that
 form the benchmark's labels. It carries a **neutral (1.0) weight by design**:
-on the calibration corpus prior-defect history is largely redundant with the
-existing process signals (correlation ≈ +0.59 with `change_entropy`, +0.38 with
-churn; calibrated coefficient ≈ +0.02, effort-aware Popt gain within bootstrap
-noise), so it is not boosted as a predictor. It ships for its **explanatory**
+its 21-repo coefficient is positive (+0.13 on keyword labels, CI spans zero;
++0.23 on SZZ labels), but it correlates with the other process signals
+(≈ +0.59 with `change_entropy`, +0.38 with churn), so it is not boosted as a
+predictor. It ships for its **explanatory**
 value, not for a measured accuracy lift: "this file was bug-fixed N times
 recently" is immediately actionable, and it uniquely flags a few files the
 other signals miss.
