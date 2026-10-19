@@ -326,6 +326,36 @@ def _query_health_line(repo_path: Path) -> str | None:
     )
 
 
+#: The resume command an interrupted ``init`` leaves for the user.
+_RESUME_COMMAND = "repowise init --resume"
+
+
+def _incomplete_index(repo_path: Path, state: dict) -> dict | None:
+    """Why the index is unfinished, or ``None``.
+
+    ``init`` writes state.json last, with ``index_scope`` (and ``last_sync_commit``
+    in a git repo), so persisted graph rows without either are a run that
+    stopped before it finished.
+    """
+    finished = state.get("last_sync_commit") or "index_scope" in state
+    if finished or not _query_repo_counts(repo_path)[0]:
+        return None
+    return {"reason": "interrupted", "next_command": _RESUME_COMMAND}
+
+
+def _shows_upgrade_row(scope: dict) -> bool:
+    """Whether the "Full upgrade" row says something the rest of status does not.
+
+    A finished index built from code stores ``pending`` for the optional model
+    run; the keyless note under the table already names that command, and a
+    bare "pending" reads as unfinished work.
+    """
+    status = scope["upgrade"]["status"]
+    if status in ("unknown", "not_applicable", "complete"):
+        return False
+    return not (status == "pending" and scope["content_provenance"] == "template")
+
+
 def _load_actions(repo_path: Path) -> dict | None:
     """The stored next-actions view, or ``None``; never raises (see ``next_cmd``)."""
     try:
@@ -632,6 +662,7 @@ def status_command(path: str | None, workspace: bool, no_workspace: bool, fmt: s
     storage_bytes = _index_storage_bytes(repowise_dir)
     db_path = repowise_dir / "wiki.db"
     has_db = db_path.exists() or db_configured()
+    incomplete = _incomplete_index(repo_path, state)
 
     if fmt == "json":
         counts, total_db_tokens = (
@@ -641,12 +672,14 @@ def status_command(path: str | None, workspace: bool, no_workspace: bool, fmt: s
             {
                 "repo": str(repo_path),
                 "indexed": True,
+                "incomplete": incomplete,
                 "state": {
                     "last_sync_commit": state.get("last_sync_commit"),
                     "total_pages": state.get("total_pages", 0),
                     "provider": state.get("provider"),
                     "model": state.get("model"),
-                    "total_tokens": state.get("total_tokens", 0),
+                    # The live rows, as the table shows: only init stamps state's.
+                    "total_tokens": total_db_tokens if counts else state.get("total_tokens", 0),
                     "storage_bytes": storage_bytes,
                 },
                 "database_found": has_db,
@@ -718,7 +751,9 @@ def status_command(path: str | None, workspace: bool, no_workspace: bool, fmt: s
         )
     if scope["analysis"]["skipped"]:
         state_table.add_row("Intentionally skipped", ", ".join(scope["analysis"]["skipped"]))
-    if scope["upgrade"]["status"] not in ("unknown", "not_applicable", "complete"):
+    if scope["test_run"]:
+        state_table.add_row("Test run", "documentation covers the top 10 files only")
+    if _shows_upgrade_row(scope):
         state_table.add_row("Full upgrade", scope["upgrade"]["status"])
     console.print(state_table)
 
@@ -753,7 +788,13 @@ def status_command(path: str | None, workspace: bool, no_workspace: bool, fmt: s
         console.print()
         console.print(health_line)
 
-    next_lines = _next_actions_lines(_load_actions(repo_path))
+    if incomplete is not None:
+        next_lines = [
+            "[bold]Next:[/bold] Index incomplete (interrupted). "
+            f"Run [bold]{incomplete['next_command']}[/bold]."
+        ]
+    else:
+        next_lines = _next_actions_lines(_load_actions(repo_path))
     if next_lines:
         console.print()
         for line in next_lines:

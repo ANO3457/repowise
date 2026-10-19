@@ -372,6 +372,7 @@ def _stamp_full_init_scope(
     resolved_commit_limit: int,
     max_file_pages: int | None,
     embedder_name_resolved: str,
+    test_run: bool = False,
 ) -> None:
     """Attach the canonical scope receipt for a successful model-backed init."""
     from repowise.core.generation.selection import count_documentable_files
@@ -400,6 +401,7 @@ def _stamp_full_init_scope(
         git_tier="full",
         git_commit_cap=resolved_commit_limit,
         dropped_files=dropped_files_scope(getattr(result, "traversal_stats", None)),
+        test_run=test_run,
         file_pages={"configured_cap": max_file_pages, **pages},
         analysis={"unavailable": unavailable, "skipped": []},
         provider={
@@ -433,6 +435,7 @@ def save_full_state_and_config(
     max_file_pages: int | None = None,
     include_submodules: bool = False,
     save_key: bool = True,
+    test_run: bool = False,
 ) -> None:
     """Persist state.json + config for a completed full-mode (docs) init run."""
 
@@ -480,6 +483,7 @@ def save_full_state_and_config(
         resolved_commit_limit=resolved_commit_limit,
         max_file_pages=max_file_pages,
         embedder_name_resolved=embedder_name_resolved,
+        test_run=test_run,
     )
     # Same pattern as git_tier: `repowise update` reads this back so its
     # graph rebuild keeps the init run's submodule boundary semantics.

@@ -188,7 +188,10 @@ def _run_workspace_init(opts: InitOptions, scan: Any) -> None:
     "--test-run",
     is_flag=True,
     default=False,
-    help="Limit generation to top 10 files by PageRank for quick validation.",
+    help=(
+        "Limit the model run to the top 10 files by PageRank for quick validation. "
+        "Needs a model, so not with --no-prose or --mode fast."
+    ),
 )
 @click.option(
     "--prose/--no-prose",

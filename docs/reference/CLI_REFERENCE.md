@@ -189,7 +189,7 @@ All three reach the indexing knobs; the LLM-only knobs appear only when model-wr
 | `--no-seed` | Disable worktree auto-seeding and run a full init even inside a linked worktree. |
 | `--yes` / `-y` | Skip confirmation prompts |
 | `--dry-run` | Show the generation plan and cost estimate. Writes no wiki |
-| `--test-run` | Generate docs for only the top 10 files (by PageRank) |
+| `--test-run` | Write docs with the model for only the top 10 files (by PageRank). Not with `--no-prose` or `--mode fast` |
 | `--all` | In multi-repo mode, index every detected repo without prompting |
 | `--no-workspace` | Force single-repo mode even when invoked from a workspace root (indexes only the target PATH instead of fanning out across workspace repos) |
 

@@ -165,6 +165,7 @@ def _stamp_scope(run: InitRun, base_state: dict[str, Any], docs_mode: str) -> No
         git_tier=git_tier_for_run_mode(run_mode),
         git_commit_cap=run.resolved_commit_limit,
         dropped_files=dropped_files_scope(getattr(result, "traversal_stats", None)),
+        test_run=run.opts.test_run and docs_mode == "llm",
         file_pages={
             "configured_cap": run.max_file_pages,
             **(
@@ -295,6 +296,7 @@ def write_run_state(run: InitRun) -> None:
             max_file_pages=run.max_file_pages,
             include_submodules=opts.include_submodules,
             save_key=opts.save_key,
+            test_run=opts.test_run,
         )
 
 
