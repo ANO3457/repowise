@@ -97,23 +97,29 @@ _BANNED = [
 _IDENTIFIER = re.compile(r"[a-z_]+")
 
 
+_DOCUMENTED = (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+
+
+def _docstring_of(node: ast.AST) -> ast.AST | None:
+    """The docstring constant of a module, class or function, if it has one."""
+    if not isinstance(node, _DOCUMENTED) or not node.body:
+        return None
+    first = node.body[0]
+    return first.value if isinstance(first, ast.Expr) else None
+
+
+def _is_text(node: ast.AST) -> bool:
+    """A string literal that is not a bare identifier."""
+    if not isinstance(node, ast.Constant) or not isinstance(node.value, str):
+        return False
+    return not _IDENTIFIER.fullmatch(node.value)
+
+
 def _user_strings(path: Path):
     tree = ast.parse(path.read_text(encoding="utf-8"))
-    docstrings = {
-        id(node.body[0].value)
-        for node in ast.walk(tree)
-        if isinstance(node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
-        and node.body
-        and isinstance(node.body[0], ast.Expr)
-        and isinstance(node.body[0].value, ast.Constant)
-    }
+    docstrings = {id(_docstring_of(node)) for node in ast.walk(tree)}
     for node in ast.walk(tree):
-        if (
-            isinstance(node, ast.Constant)
-            and isinstance(node.value, str)
-            and id(node) not in docstrings
-            and not _IDENTIFIER.fullmatch(node.value)
-        ):
+        if _is_text(node) and id(node) not in docstrings:
             yield node.lineno, node.value
 
 
