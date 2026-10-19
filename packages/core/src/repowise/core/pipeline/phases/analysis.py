@@ -382,8 +382,13 @@ async def _run_decision_extraction(
     parsed_files: list[Any],
     source_map: dict[str, bytes] | None = None,
     progress: ProgressCallback | None,
+    no_model_reason: str | None = None,
 ) -> Any | None:
-    """Extract architectural decisions from source and git history."""
+    """Extract architectural decisions from source and git history.
+
+    *no_model_reason* replaces the no-provider reason when the caller chose a
+    run without a model rather than having none configured.
+    """
     try:
         from repowise.core.analysis.decision_extractor import DecisionExtractor
         from repowise.core.analysis.decisions.policy import resolve_policy
@@ -442,6 +447,7 @@ async def _run_decision_extraction(
                 enabled=enabled,
                 discovery=discovery,
                 provider_available=llm_client is not None,
+                no_model_reason=no_model_reason,
             )
 
         _phase_done(progress, "decisions")
@@ -500,6 +506,7 @@ def _report_decision_sources(
     enabled: Any,
     discovery: DiscoveryOutcome,
     provider_available: bool,
+    no_model_reason: str | None = None,
 ) -> None:
     """Say per source what was found, found nothing, failed, or never ran.
 
@@ -511,7 +518,9 @@ def _report_decision_sources(
     failures = dict(getattr(report, "failures", {}) or {})
     if discovery.report.status == "failed":
         failures["session_discovery"] = discovery.report.reason
-    runtime, not_run = _decision_sources_not_run(policy, discovery, provider_available)
+    runtime, not_run = _decision_sources_not_run(
+        policy, discovery, provider_available, no_model_reason
+    )
     # ``session`` is mined outside the extractor, so it is never listed as empty.
     considered = set(enabled) | {DISCOVERY_SOURCE}
     # A grounded candidate is a finding even before a second sighting promotes it.
@@ -576,7 +585,10 @@ def _decision_headline(report: Any) -> str:
 
 
 def _decision_sources_not_run(
-    policy: Any, discovery: DiscoveryOutcome, provider_available: bool
+    policy: Any,
+    discovery: DiscoveryOutcome,
+    provider_available: bool,
+    no_model_reason: str | None = None,
 ) -> tuple[dict[str, Any], set[str]]:
     """Runtime status per source and the togglable sources that never ran.
 
@@ -595,4 +607,12 @@ def _decision_sources_not_run(
         runtime[DISCOVERY_SOURCE] = replace(
             runtime[DISCOVERY_SOURCE], reason=discovery.report.reason
         )
+    if no_model_reason:
+        if discovery.report.status == "skipped_no_provider":
+            runtime[DISCOVERY_SOURCE] = replace(
+                runtime[DISCOVERY_SOURCE], reason=no_model_reason
+            )
+        for key, rt in runtime.items():
+            if rt.status == "skipped_no_provider":
+                runtime[key] = replace(rt, reason=no_model_reason)
     return runtime, not_run

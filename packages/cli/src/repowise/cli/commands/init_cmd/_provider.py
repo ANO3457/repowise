@@ -14,6 +14,10 @@ from repowise.cli.ui import OK, OWL_SPINNER, VALUE, WARN, print_index_only_intro
 
 from ._options import InitRun
 
+# Why the model-only decision sources did not run on a structural run, where a
+# key may well be configured.
+STRUCTURAL_NO_MODEL_REASON = "this run builds from code; repowise generate adds them"
+
 
 def announce_index_only(run: InitRun) -> None:
     """Tell the user this run builds the wiki from structure."""

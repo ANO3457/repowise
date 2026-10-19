@@ -256,6 +256,8 @@ class TestProseFlag:
         result = runner.invoke(cli, ["init", str(tmp_path), *flags, "--yes"])
         assert result.exit_code == 0, result.output
         factory.assert_not_called()
+        assert "No LLM provider is configured" not in result.output
+        assert "this run builds from code" in result.output
 
     def test_index_only_prints_deprecation(self, runner, tmp_path, keyless_env):
         """The deprecated alias still works and says so."""

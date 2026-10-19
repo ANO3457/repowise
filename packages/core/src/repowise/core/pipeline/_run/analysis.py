@@ -86,6 +86,7 @@ async def _backfill_decisions(run: PipelineRun) -> None:
         parsed_files=run.parsed_files,
         source_map=run.source_map,
         progress=run.progress,
+        no_model_reason=run.no_model_reason,
     )
     if run.decision_report is not None:
         run.gen_decision_report = run.decision_report
@@ -131,6 +132,7 @@ async def _compute_analysis(run: PipelineRun) -> None:
             parsed_files=run.parsed_files,
             source_map=run.source_map,
             progress=progress,
+            no_model_reason=run.no_model_reason,
         ),
         _orch._run_doc_drift_analysis(
             run.source_map,

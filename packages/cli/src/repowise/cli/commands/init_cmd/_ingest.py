@@ -18,6 +18,7 @@ from repowise.cli.ui import (
 )
 
 from ._options import InitRun
+from ._provider import STRUCTURAL_NO_MODEL_REASON
 from .persistence import build_resume_controller
 
 
@@ -100,6 +101,7 @@ async def _index_with_resume(
             ),
             # Only local init describes the user's own environment.
             derive_environment_facts=True,
+            no_model_reason=STRUCTURAL_NO_MODEL_REASON if opts.index_only else None,
         )
     finally:
         if engine is not None:

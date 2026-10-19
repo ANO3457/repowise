@@ -211,6 +211,7 @@ async def run_pipeline(
     resume_controller: ResumeController | None = None,
     coverage_report_paths: list[Path] | None = None,
     derive_environment_facts: bool = False,
+    no_model_reason: str | None = None,
 ) -> PipelineResult:
     """Run the repowise indexing/analysis/generation pipeline.
 
@@ -257,6 +258,10 @@ async def run_pipeline(
         a hosted or CI indexer would otherwise measure its own container and
         store the answer as a fact about the user's repository. The facts read
         off the walk itself are unconditional and unaffected by this flag.
+    no_model_reason:
+        Why *llm_client* is None when the caller chose not to pass one (a
+        structural run), shown for the model-only decision sources in place of
+        "No LLM provider is configured".
 
     Returns
     -------
@@ -299,6 +304,7 @@ async def run_pipeline(
         on_page_ready=on_page_ready,
         resume_controller=resume_controller,
         coverage_report_paths=coverage_report_paths,
+        no_model_reason=no_model_reason,
     )
 
     await run_index_phase(run)
