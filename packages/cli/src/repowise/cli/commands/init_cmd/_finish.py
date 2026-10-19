@@ -124,7 +124,15 @@ def save_run_config(run: InitRun) -> None:
 
 def register_clients(run: InitRun) -> None:
     """Global client registration, then the workspace's distill verdict."""
-    register_editor_clients(console, run.repo_path, no_editor_setup=not run.opts.editor_setup)
+    from repowise.cli.editor_integrations.global_mcp import confirm_global_mcp
+
+    if confirm_global_mcp(
+        console,
+        run.repo_path,
+        yes=run.opts.yes,
+        no_editor_setup=not run.opts.editor_setup,
+    ):
+        register_editor_clients(console, run.repo_path)
 
     # Before the config fingerprint: left unwritten, the first update writes it,
     # sees a fingerprint change and re-scores every file.
