@@ -62,7 +62,6 @@ _LAZY: dict[str, str] = {
     "print_analysis_summary": "result_panels",
     "print_banner": "brand",
     "print_completion_panel": "result_panels",
-    "print_index_only_intro": "mode_selection",
     "print_phase_header": "brand",
     "print_section": "brand",
     "print_stage": "progress",

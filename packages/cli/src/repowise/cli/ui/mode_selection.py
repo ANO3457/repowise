@@ -20,7 +20,6 @@ from repowise.cli.ui.brand import (
     key_value_table,
     print_section,
 )
-from repowise.cli.ui.glyphs import glyph
 from repowise.cli.ui.mode_names import BUILT_FROM_CODE, INDEX_ONLY, written_by
 from repowise.cli.ui.repo_scanner import (
     RepoScanInfo,
@@ -619,41 +618,3 @@ def _resolve_embedder_from_env() -> str:
     from repowise.cli.providers.keys import global_config_embedder
 
     return global_config_embedder() or "mock"
-
-
-def print_index_only_intro(console: Console, *, fast: bool = False) -> None:
-    """Show what index-only mode will do before starting.
-
-    A forecast, so no border — nothing here is a thing to act on, and it used to
-    carry the same box as the question two screens earlier.
-    """
-    title = INDEX_ONLY if fast else BUILT_FROM_CODE
-    print_section(console, title, "No LLM calls. No API key. No cost.")
-    console.print()
-    # Bullets, not checkmarks: every green ✓ elsewhere in a run means "already
-    # done", and this is a forecast.
-    bullet = f"  [{DIM}]{glyph('bullet')}[/]"
-    lines = [
-        f"{bullet} Parse all source files (AST)",
-        f"{bullet} Build dependency graph (PageRank, communities)",
-        f"{bullet} Index git history (hotspots, ownership, co-changes)",
-        f"{bullet} Detect dead code",
-        f"{bullet} Extract architectural decisions without a model",
-        f"{bullet} Set up MCP server for AI assistants",
-    ]
-    if not fast:
-        lines[5:5] = [
-            f"{bullet} Build documentation from code: file, module, layer and",
-            "    cycle pages, the architecture diagram, the repo overview, API and",
-            "    infra pages, and the onboarding collection",
-        ]
-    for line in lines:
-        console.print(line)
-    console.print()
-    if not fast:
-        console.print(
-            "  [dim]The subsystem pages read as outlines, and decisions from PRs, commit "
-            "history and comments wait for a model. Add a key and run "
-            "[bold]repowise generate[/bold] to add both.[/dim]"
-        )
-        console.print()
