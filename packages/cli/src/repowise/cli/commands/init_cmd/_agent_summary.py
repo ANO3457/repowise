@@ -49,10 +49,14 @@ def _stored_mode(repo_path: Path) -> dict[str, Any] | None:
     """The mode state.json records, or None when this repo has no index yet."""
     from repowise.core.index_scope import resolve_index_scope
 
-    state = load_state(repo_path)
-    if not state.get("index_scope"):
+    # Runs inside the exit handlers: a corrupt state or config must not cost the summary.
+    try:
+        state = load_state(repo_path)
+        if not state.get("index_scope"):
+            return None
+        return mode_of(resolve_index_scope(state, load_config(repo_path)))
+    except Exception:
         return None
-    return mode_of(resolve_index_scope(state, load_config(repo_path)))
 
 
 def _relative(repo_path: Path, paths: list[Path]) -> list[str]:
