@@ -9,6 +9,8 @@ carries a glyph as well as a colour, so it still reads with colour off.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from rich.markup import escape
 
 from repowise.cli.ui.brand import DIM, OK, format_elapsed
@@ -84,20 +86,25 @@ def format_running(seconds: float | None) -> str:
     return f"{whole}s"
 
 
-def done_line(
-    raw_label: str,
-    *,
-    completed: float,
-    total: float | None,
-    unit: str,
-    elapsed: float | None,
-) -> str:
+@dataclass(frozen=True)
+class FinishedStep:
+    """What a done row reports about one step."""
+
+    label: str
+    completed: float = 0
+    total: float | None = None
+    unit: str = ""
+    elapsed: float | None = None
+
+
+def done_line(step: FinishedStep) -> str:
     """The markup line a finished step leaves behind: ``  ✓ Parsing files · 30 files · 0.4s``."""
-    label, depth = split_label(raw_label)
+    label, depth = split_label(step.label)
     glyph, style = STATE_MARKS[DONE]
     indent = "  " * (depth + 1)
-    count = count_text(total or completed, None, unit) if (total or completed) else ""
-    facts = [f for f in (count, format_elapsed(elapsed or 0.0)) if f]
+    amount = step.total or step.completed
+    count = count_text(amount, None, step.unit) if amount else ""
+    facts = [f for f in (count, format_elapsed(step.elapsed or 0.0)) if f]
     tail = f" [{DIM}]· {' · '.join(facts)}[/]" if facts else ""
     return f"{indent}[{style}]{glyph}[/] {escape(label)}{tail}"
 

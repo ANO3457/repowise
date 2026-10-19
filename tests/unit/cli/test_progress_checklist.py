@@ -77,16 +77,14 @@ def test_running_time_is_whole_seconds() -> None:
 
 def test_a_done_row_names_the_step_its_count_and_its_time() -> None:
     line = checklist.done_line(
-        "Parsing files…", completed=30, total=30, unit="files", elapsed=0.42
+        checklist.FinishedStep("Parsing files…", completed=30, total=30, unit="files", elapsed=0.42)
     )
     plain = Console().render_str(line).plain
     assert plain == "  ✓ Parsing files · 30 files · 0.4s"
 
 
 def test_a_substep_done_row_is_indented_and_a_unitless_step_shows_only_its_time() -> None:
-    line = checklist.done_line(
-        "  ↳ Detecting communities", completed=0, total=None, unit="", elapsed=1.5
-    )
+    line = checklist.done_line(checklist.FinishedStep("  ↳ Detecting communities", elapsed=1.5))
     assert Console().render_str(line).plain == "    ✓ Detecting communities · 1.5s"
 
 
@@ -101,7 +99,7 @@ def test_no_em_dashes_in_checklist_copy() -> None:
     texts = [
         checklist.long_step_line("repowise init --resume"),
         checklist.upcoming_line(["Analysis"]),
-        checklist.done_line("Parsing files…", completed=1, total=1, unit="files", elapsed=1),
+        checklist.done_line(checklist.FinishedStep("Parsing files…", 1, 1, "files", 1.0)),
     ]
     assert not any("—" in t for t in texts)
 

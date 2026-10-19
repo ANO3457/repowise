@@ -48,7 +48,7 @@ def emit_item(progress: Any, phase: str, label: str) -> None:
         return
     try:
         fn(phase, label)
-    except Exception:
+    except Exception:  # a display callback must never break the pipeline
         logger.debug("progress_item_emit_failed", phase=phase, exc_info=True)
 
 
@@ -62,7 +62,7 @@ def emit_phase_failed(progress: Any, phase: str) -> None:
         return
     try:
         fn(phase)
-    except Exception:
+    except Exception:  # a display callback must never break the pipeline
         logger.debug("progress_phase_failed_emit_failed", phase=phase, exc_info=True)
 
 

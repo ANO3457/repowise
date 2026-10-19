@@ -275,11 +275,13 @@ class RichProgressCallback:
         if task is None:
             return
         line = checklist.done_line(
-            str(task.description),
-            completed=task.completed,
-            total=task.total,
-            unit=str(task.fields.get("unit", "")),
-            elapsed=task.elapsed,
+            checklist.FinishedStep(
+                label=str(task.description),
+                completed=task.completed,
+                total=task.total,
+                unit=str(task.fields.get("unit", "")),
+                elapsed=task.elapsed,
+            )
         )
         self._print_above_live(lambda: self._progress.console.print(line, highlight=False))
 
