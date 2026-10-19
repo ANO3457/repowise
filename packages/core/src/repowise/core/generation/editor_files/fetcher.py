@@ -14,9 +14,10 @@ from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from repowise.core.analysis.c4.containers import MANIFEST_BASENAMES, MANIFEST_SUFFIXES
 from repowise.core.analysis.finding_registry import excluded_types
 from repowise.core.analysis.health.grading import (
     BAND_LABEL,
@@ -40,6 +41,7 @@ from repowise.core.persistence.crud.analysis.fix_first import load_fix_first
 from repowise.core.persistence.crud.analysis.shown import ungated
 from repowise.core.persistence.models import (
     DecisionRecord,
+    ExternalSystem,
     GitMetadata,
     GraphNode,
     HealthFileMetric,
@@ -55,6 +57,7 @@ from .data import (
     KeyModule,
     KGLayerSummary,
     KGTourStepSummary,
+    PackageRow,
 )
 from .sections import load_sections, resolve_sections
 from .tech_stack import detect_build_commands, detect_tech_stack
@@ -119,6 +122,9 @@ class EditorFileDataFetcher:
         # below it. Fall back to the shell-out only when the column is empty
         # (pre-backfill indexes).
         stored_commit = ((repo.head_commit or "")[:7]) if repo else ""
+        packages, packages_omitted = (
+            await self._get_packages() if "packages" in s else ([], 0)
+        )
 
         return EditorFileData(
             repo_name=repo_name,
@@ -143,6 +149,8 @@ class EditorFileDataFetcher:
             kg_tour=kg_tour,
             index_scope=self._get_index_scope(),
             sections=s,
+            packages=packages,
+            packages_omitted=packages_omitted,
         )
 
     def _get_index_scope(self) -> dict:
@@ -209,7 +217,7 @@ class EditorFileDataFetcher:
             )
         return modules
 
-    async def _get_entry_points(self) -> list[str]:
+    async def _get_entry_points(self, limit: int | None = _MAX_ENTRY_POINTS) -> list[str]:
         """Curated orientation entry points (re-export barrels and sinks demoted).
 
         Prefers the curated ``kg_project_meta`` list, and falls back to the raw
@@ -239,7 +247,7 @@ class EditorFileDataFetcher:
             except (json.JSONDecodeError, TypeError):
                 curated = []
             if curated:
-                return orientation_entry_points_view(curated)[:_MAX_ENTRY_POINTS]
+                return orientation_entry_points_view(curated)[:limit]
 
         result = await self._session.execute(
             select(GraphNode.node_id, GraphNode.pagerank, GraphNode.betweenness).where(
@@ -249,7 +257,7 @@ class EditorFileDataFetcher:
         )
         candidates = [(node_id, pr or 0.0, bt or 0.0) for node_id, pr, bt in result.all()]
         ranked = rank_entry_points(candidates, conventional_entry_stems())
-        return orientation_entry_points_view(ranked)[:_MAX_ENTRY_POINTS]
+        return orientation_entry_points_view(ranked)[:limit]
 
     async def _get_hotspots(self) -> list[HotspotFile]:
         """Top attention-worthy files: bug-fix history first, churn as fallback.
@@ -612,6 +620,49 @@ class EditorFileDataFetcher:
             )
         )
         return {row[0]: row[1] for row in result.all()}
+
+    async def _get_packages(self) -> tuple[list[PackageRow], int]:
+        """One row per package, and how many were left out; see :mod:`.packages`."""
+        from .packages import CODE_LANGUAGES, build_package_rows  # it imports this module
+
+        # Only rows that can count or mark a package root: production code and manifests.
+        manifest_like = [GraphNode.node_id.ilike(f"%{n}") for n in sorted(MANIFEST_BASENAMES)]
+        manifest_like += [GraphNode.node_id.ilike(f"%{s}") for s in MANIFEST_SUFFIXES]
+        files = await self._session.execute(
+            select(GraphNode.node_id, GraphNode.language, GraphNode.is_test).where(
+                GraphNode.repository_id == self._repo_id,
+                GraphNode.node_type == "file",
+                GraphNode.is_test == False,  # noqa: E712
+                ~GraphNode.node_id.like("external:%"),
+                or_(GraphNode.language.in_(sorted(CODE_LANGUAGES)), *manifest_like),
+            )
+        )
+        manifests = await self._session.execute(
+            select(ExternalSystem.declared_in)
+            .where(ExternalSystem.repository_id == self._repo_id)
+            .distinct()
+        )
+        # The summary, else the head of the essay: its first sentence is the role.
+        pages = await self._session.execute(
+            select(
+                Page.target_path,
+                Page.summary,
+                func.substr(Page.content, 1, 2000).label("content"),
+                Page.provider_name,
+                Page.metadata_json,
+            ).where(
+                Page.repository_id == self._repo_id,
+                Page.page_type == "module_page",
+                Page.freshness_status != "tombstone",
+            )
+        )
+        return build_package_rows(
+            [tuple(row) for row in files.all()],
+            [m for (m,) in manifests.all() if m],
+            pages.all(),
+            await self._get_entry_points(limit=None),
+            repo_root=self._repo_path,
+        )
 
 
 # ------------------------------------------------------------------

@@ -10,7 +10,7 @@ from typing import Any
 
 from sqlalchemy import select
 
-from repowise.core.generation.layers import is_adjacent_layer
+from repowise.core.generation.layers import is_adjacent_layer, majority_root
 from repowise.core.persistence.crud import (
     get_kg_layers as _get_kg_layers,
 )
@@ -129,22 +129,11 @@ async def _build_architecture(
 def _layer_row(layer: Any, package_roots: list[str]) -> dict[str, Any]:
     ids = json.loads(layer.node_ids_json) if layer.node_ids_json else []
     row: dict[str, Any] = {"name": layer.name, "file_count": len(ids)}
-    root = _majority_root([i.removeprefix("file:") for i in ids])
+    root = majority_root([i.removeprefix("file:") for i in ids])
     # A directory above two packages (``packages/``) locates nothing.
     if root and sum(p.startswith(root + "/") for p in package_roots) < 2:
         row["root"] = root
     return row
-
-
-def _majority_root(paths: list[str]) -> str | None:
-    """The deepest directory holding most of *paths*, or ``None``."""
-    under: Counter = Counter()
-    for path in paths:
-        parts = path.split("/")[:-1]
-        for depth in range(1, len(parts) + 1):
-            under["/".join(parts[:depth])] += 1
-    held = [d for d, n in under.items() if 2 * n > len(paths)]
-    return max(held, key=lambda d: (d.count("/"), under[d]), default=None)
 
 
 async def _build_package_dependencies(

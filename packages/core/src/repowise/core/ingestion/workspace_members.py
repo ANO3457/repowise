@@ -143,13 +143,18 @@ def manifest_package_name(manifest: Path) -> str | None:
     return _manifest_field(manifest, "name")
 
 
+def manifest_description(manifest: Path) -> str | None:
+    """The ``description`` *manifest* gives its package, or None when it gives none."""
+    return _manifest_field(manifest, "description")
+
+
 _ROOT_MANIFESTS = ("package.json", "pyproject.toml", "Cargo.toml", "go.mod")
 
 
 def root_description(repo_root: Path) -> str | None:
     """The ``description`` the repo's root manifest gives itself, if any."""
     for filename in _ROOT_MANIFESTS:
-        text = _manifest_field(repo_root / filename, "description")
+        text = manifest_description(repo_root / filename)
         if text:
             return text
     return None

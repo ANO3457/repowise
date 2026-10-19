@@ -192,7 +192,7 @@ def rank_entry_points(
 
 #: Directories of build and CI tooling. Narrower than the layer map's tooling
 #: tokens: a ``plugins/`` tree can be a runtime plugin system.
-_TOOLING_DIRS = frozenset({"scripts", "docker"})
+TOOLING_DIRS = frozenset({"scripts", "docker"})
 
 
 def orientation_entry_points_view(paths: Iterable[str]) -> list[str]:
@@ -203,5 +203,5 @@ def orientation_entry_points_view(paths: Iterable[str]) -> list[str]:
     there is, the list is returned whole rather than emptied.
     """
     paths = list(paths)
-    runtime = [p for p in paths if not _TOOLING_DIRS & set(p.lower().split("/")[:-1])]
+    runtime = [p for p in paths if not TOOLING_DIRS & set(p.lower().split("/")[:-1])]
     return runtime or paths

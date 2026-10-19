@@ -37,6 +37,18 @@ class KeyModule:
 
 
 @dataclass(frozen=True)
+class PackageRow:
+    """One package, or one top-level source directory of a single-package repo."""
+
+    path: str  # repo-relative; "." for the repository root
+    role: str  # one clause, no trailing period; "" when the index has none
+    language: str  # dominant code language, or ""
+    file_count: int  # production code files under ``path``
+    entry_point: str | None = None  # best orientation entry point under ``path``
+    name: str = ""  # manifest package name, only when it differs from the directory name
+
+
+@dataclass(frozen=True)
 class HotspotFile:
     path: str
     churn_percentile: float
@@ -137,6 +149,8 @@ class EditorFileData:
     kg_tour: list[KGTourStepSummary] = field(default_factory=list)
     index_scope: dict = field(default_factory=dict)
     sections: frozenset[str] = DEFAULT_SECTIONS
+    packages: list[PackageRow] = field(default_factory=list)
+    packages_omitted: int = 0
 
     @property
     def keyless(self) -> bool:

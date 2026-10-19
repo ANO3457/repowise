@@ -21,7 +21,7 @@ strings and edge tuples, which keeps them trivially unit-testable.
 from __future__ import annotations
 
 import re
-from collections import defaultdict
+from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping
 from pathlib import PurePosixPath
 
@@ -362,3 +362,14 @@ def compute_layer_order(
     ordered = sorted(runtime, key=sort_key)
     ordered += sorted(adjacent, key=_canonical_rank)
     return ordered
+
+
+def majority_root(paths: list[str]) -> str | None:
+    """The deepest directory holding most of *paths*, or ``None``."""
+    under: Counter = Counter()
+    for path in paths:
+        parts = path.split("/")[:-1]
+        for depth in range(1, len(parts) + 1):
+            under["/".join(parts[:depth])] += 1
+    held = [d for d, n in under.items() if 2 * n > len(paths)]
+    return max(held, key=lambda d: (d.count("/"), under[d]), default=None)

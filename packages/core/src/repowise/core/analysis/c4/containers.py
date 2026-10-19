@@ -20,7 +20,7 @@ from repowise.core.support_paths import is_test_or_example_path
 # root even when the manifest declares no external dependencies (so a package
 # like ``packages/core`` is its own container instead of dissolving into the
 # repo-root catch-all).
-_MANIFEST_BASENAMES = frozenset(
+MANIFEST_BASENAMES = frozenset(
     {
         "pyproject.toml",
         "setup.py",
@@ -34,12 +34,12 @@ _MANIFEST_BASENAMES = frozenset(
         "gemfile",
     }
 )
-_MANIFEST_SUFFIXES = (".csproj",)
+MANIFEST_SUFFIXES = (".csproj",)
 
 
 def is_manifest(path: str) -> bool:
     base = path.rsplit("/", 1)[-1].lower()
-    return base in _MANIFEST_BASENAMES or base.endswith(_MANIFEST_SUFFIXES)
+    return base in MANIFEST_BASENAMES or base.endswith(MANIFEST_SUFFIXES)
 
 
 def manifest_roots(manifests: Iterable[str]) -> dict[str, list[str]]:
