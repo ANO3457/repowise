@@ -7,7 +7,6 @@ from typing import Any
 
 from repowise.cli.helpers import console
 from repowise.cli.ui import (
-    OWL_SPINNER,
     WARN,
     agent_providers_set_up,
     interactive_advanced_config,
@@ -22,6 +21,8 @@ from repowise.cli.ui import (
     quick_repo_scan,
     should_offer_fast_mode,
 )
+from repowise.cli.ui.glyphs import glyph
+from repowise.cli.ui.mascot import owl_status
 
 from ._options import InitRun
 
@@ -145,7 +146,7 @@ def _offer_fast_mode(run: InitRun, scan_info: Any) -> None:
 def _ask_questions(run: InitRun) -> None:
     """The interactive questionnaire (TTY, no explicit flags)."""
     print_banner(console, repo_name=run.repo_path.name)
-    with console.status("  Scanning repository…", spinner=OWL_SPINNER):
+    with owl_status(console, f"  Scanning repository{glyph('ellipsis')}"):
         scan_info = quick_repo_scan(run.repo_path)
     print_scan_summary(console, scan_info)
 

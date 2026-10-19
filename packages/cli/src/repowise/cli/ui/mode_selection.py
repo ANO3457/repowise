@@ -20,6 +20,7 @@ from repowise.cli.ui.brand import (
     key_value_table,
     print_section,
 )
+from repowise.cli.ui.glyphs import glyph
 from repowise.cli.ui.repo_scanner import (
     RepoScanInfo,
     estimated_documentable_files,
@@ -69,9 +70,10 @@ def interactive_fast_mode_offer(
     body.append("  Large repository detected — ", style="bold")
     body.append(f"{n:,} files.\n\n", style=BRAND_STYLE)
     body.append("  Fast mode runs a quick first index:\n", style="bold")
-    body.append("    • dependency graph + essential git history\n")
-    body.append("    • graph metrics materialized to SQL\n")
-    body.append("    • no per-file blame, no co-change walk, no LLM docs\n\n")
+    bullet = glyph("bullet")
+    body.append(f"    {bullet} dependency graph + essential git history\n")
+    body.append(f"    {bullet} graph metrics materialized to SQL\n")
+    body.append(f"    {bullet} no per-file blame, no co-change walk, no LLM docs\n\n")
     body.append("  You can backfill full git history and generate docs later.\n", style="dim")
     console.print(
         Panel(
@@ -675,21 +677,20 @@ def print_index_only_intro(console: Console, has_provider: bool = False) -> None
     console.print()
     # Bullets, not checkmarks: every green ✓ elsewhere in a run means "already
     # done", and this is a forecast.
+    bullet = f"  [{DIM}]{glyph('bullet')}[/]"
     lines = [
-        "  [dim]•[/dim] Parse all source files (AST)",
-        "  [dim]•[/dim] Build dependency graph (PageRank, communities)",
-        "  [dim]•[/dim] Index git history (hotspots, ownership, co-changes)",
-        "  [dim]•[/dim] Detect dead code",
-        "  [dim]•[/dim] Extract architectural decisions",
-        "  [dim]•[/dim] Render the wiki from structure: file, module, layer and",
+        f"{bullet} Parse all source files (AST)",
+        f"{bullet} Build dependency graph (PageRank, communities)",
+        f"{bullet} Index git history (hotspots, ownership, co-changes)",
+        f"{bullet} Detect dead code",
+        f"{bullet} Extract architectural decisions",
+        f"{bullet} Render the wiki from structure: file, module, layer and",
         "    cycle pages, the architecture diagram, the repo overview, API and",
         "    infra pages, and the onboarding collection",
-        "  [dim]•[/dim] Set up MCP server for AI assistants",
+        f"{bullet} Set up MCP server for AI assistants",
     ]
     if has_provider:
-        lines.append(
-            "  [dim]•[/dim] [dim]Decision extraction enhanced (provider key detected)[/dim]"
-        )
+        lines.append(f"{bullet} [{DIM}]Decision extraction enhanced (provider key detected)[/]")
     for line in lines:
         console.print(line)
     console.print()

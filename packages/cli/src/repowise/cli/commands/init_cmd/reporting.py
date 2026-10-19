@@ -21,9 +21,11 @@ from repowise.cli.ui import (
     build_status_notes,
     format_elapsed,
     keyless_upgrade_note,
+    mascot,
     print_analysis_summary,
     print_files_written,
 )
+from repowise.cli.ui.glyphs import glyph
 
 
 def show_analysis_summary(result: Any) -> None:
@@ -139,8 +141,11 @@ def show_completion(
     provider: Any,
     setup: Any = None,
     files_written: list[Path] | None = None,
+    owl: str = mascot.DONE,
 ) -> None:
     """Render the final completion panel (index-only or full mode).
+
+    *owl* is the mini owl state on the panel title: how the run finished.
 
     *setup* is the :class:`~repowise.cli.editor_setup.EditorSetupOutcome`
     snapshot, so the next-step panel and the MCP status note reflect what setup
@@ -260,7 +265,9 @@ def show_completion(
         )
         console.print()
         console.print(
-            build_completion_panel("repowise index complete", metrics, next_steps=next_steps)
+            build_completion_panel(
+                "repowise index complete", metrics, next_steps=next_steps, owl=owl
+            )
         )
         console.print()
         # Fast mode reaches this branch too, and it generates nothing, so the
@@ -350,7 +357,9 @@ def show_completion(
 
         console.print()
         console.print(
-            build_completion_panel("repowise init complete", metrics, next_steps=next_steps)
+            build_completion_panel(
+                "repowise init complete", metrics, next_steps=next_steps, owl=owl
+            )
         )
         console.print()
         _print_embed_failure(_embed_failed)
@@ -444,7 +453,12 @@ def show_workspace_completion(
 
     console.print()
     console.print(
-        build_completion_panel("repowise workspace init complete", metrics, next_steps=next_steps)
+        build_completion_panel(
+            "repowise workspace init complete",
+            metrics,
+            next_steps=next_steps,
+            owl=mascot.WARNED if errors else mascot.DONE,
+        )
     )
     console.print()
 
@@ -457,10 +471,11 @@ def show_workspace_completion(
         for alias, (count, reason) in docs_outcomes.items():
             if reason:
                 console.print(
-                    f"  [{WARN}]✗[/] {alias:<20} [{WARN}]skipped[/]  [dim]({reason})[/dim]"
+                    f"  [{WARN}]{glyph('fail')}[/] {alias:<20} [{WARN}]skipped[/]  "
+                    f"[dim]({reason})[/dim]"
                 )
             else:
-                console.print(f"  [{OK}]✓[/] {alias:<20} [{OK}]{count} pages[/]")
+                console.print(f"  [{OK}]{glyph('ok')}[/] {alias:<20} [{OK}]{count} pages[/]")
         if docs_skipped:
             first = docs_skipped[0][0]
             console.print()

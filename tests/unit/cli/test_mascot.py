@@ -20,7 +20,7 @@ import unicodedata
 from rich.console import Console
 
 from repowise.cli.ui import mascot
-from repowise.cli.ui.brand import BRAND, print_banner
+from repowise.cli.ui.brand import BRAND_STYLE, OWL, print_banner
 
 BANNER_MAX_COLS = 47
 
@@ -45,20 +45,17 @@ def test_banner_is_deterministic_and_repo_independent() -> None:
 
 def test_wordmark_is_one_accent() -> None:
     # Rule 2: one accent. Every styled span in the banner is either the brand
-    # orange (wordmark + eyes) or the logo white (owl strokes) — no ramp, no
-    # third hue.
+    # orange (wordmark + eyes) or the cream owl strokes: no ramp, no third hue.
     styles = {str(span.style) for span in mascot.banner_text().spans}
-    assert styles == {f"bold {BRAND}", f"bold {mascot.WHITE}"}
+    assert styles == {BRAND_STYLE, OWL}
 
 
 def test_frames_are_uniform_width() -> None:
     assert all(len(frame) == 5 for frame in mascot.THINKING_FRAMES)
-    assert mascot.OWL_SPINNER in ("owl", "dots")
-    if mascot.OWL_SPINNER == "owl":
-        from rich.spinner import Spinner
-
-        spinner = Spinner("owl")
-        assert spinner.frames == mascot.THINKING_FRAMES
+    for tick in range(len(mascot.THINKING_FRAMES)):
+        frame = mascot.thinking_text(tick * 0.18 + 0.01)
+        assert frame.plain == mascot.THINKING_FRAMES[tick]
+        assert frame.cell_len == 5
 
 
 def test_art_is_utf8_clean() -> None:
@@ -67,9 +64,7 @@ def test_art_is_utf8_clean() -> None:
     art: list[str] = [
         *mascot.OWL,
         *mascot.THINKING_FRAMES,
-        mascot.mini(mascot.EYES_IDLE),
-        mascot.mini(mascot.EYES_SLEEPY),
-        mascot.mini(mascot.EYES_HAPPY),
+        *(mascot.mini(state) for state in mascot.EYES),
     ]
     for glyph in mascot.FONT.values():
         art.extend(glyph)

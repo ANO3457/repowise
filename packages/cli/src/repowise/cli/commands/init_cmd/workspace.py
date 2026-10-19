@@ -61,6 +61,7 @@ from repowise.cli.ui import (
     make_progress,
     print_banner,
 )
+from repowise.cli.ui.glyphs import glyph
 from repowise.core.docs_mode import docs_mode_state_fields
 from repowise.core.generation.styles import DEFAULT_STYLE
 
@@ -331,7 +332,7 @@ def _ingest_and_generate_repo(repo: Any, idx: int, total: int, ctx: _WorkspaceCt
     On pipeline failure the outcome carries ``error`` and nothing is persisted.
     """
     console.print(
-        f"  [{BRAND}][{idx}/{total}][/] Indexing [bold]{repo.alias}[/bold] ({repo.path.name})…"
+        f"  [{BRAND}][{idx}/{total}][/] Indexing [bold]{repo.alias}[/bold] ({repo.path.name}){glyph('ellipsis')}"
     )
     ensure_repowise_dir(repo.path)
 
@@ -343,7 +344,7 @@ def _ingest_and_generate_repo(repo: Any, idx: int, total: int, ctx: _WorkspaceCt
     try:
         index = _index_repo(repo, ctx, repo_provider)
     except Exception as exc:
-        console.print(f"    [{ERR}]✗ Failed: {exc}[/]\n")
+        console.print(f"    [{ERR}]{glyph('fail')} Failed: {exc}[/]\n")
         return _RepoOutcome(error=str(exc))
     result = index.result
 
@@ -430,7 +431,7 @@ def _index_repo(repo: Any, ctx: _WorkspaceCtx, repo_provider: Any) -> _RepoIndex
                 derive_environment_facts=True,
             )
         )
-    console.print(f"    [{OK}]✓[/] {result.file_count:,} files, {result.symbol_count:,} symbols")
+    console.print(f"    [{OK}]{glyph('ok')}[/] {result.file_count:,} files, {result.symbol_count:,} symbols")
     return _RepoIndex(result=result, callback=callback, provider=repo_provider)
 
 
@@ -487,7 +488,7 @@ def _generate_repo_with_model(
 
         docs.pages_generated = len(generated_pages) - count_stub_fallbacks(generated_pages)
         docs.docs_mode = "llm"
-        console.print(f"    [{OK}]✓[/] Generated {docs.pages_generated} pages\n")
+        console.print(f"    [{OK}]{glyph('ok')}[/] Generated {docs.pages_generated} pages\n")
     except CostGateDeclined:
         # Declining only meant "not at that price": fall back to the free
         # template renderer rather than leave the repo with no wiki.
@@ -498,7 +499,7 @@ def _generate_repo_with_model(
         )
         _render_repo_from_templates(repo, ctx, index, docs)
     except Exception as gen_exc:
-        console.print(f"    [{ERR}]✗ Generation failed: {gen_exc}[/]\n")
+        console.print(f"    [{ERR}]{glyph('fail')} Generation failed: {gen_exc}[/]\n")
         docs.skip_reason = f"generation error: {gen_exc}"
         result.generated_pages = []
 
@@ -523,7 +524,7 @@ def _render_repo_from_templates(
     docs.pages_generated = len(generated_pages)
     docs.docs_mode = "deterministic"
     console.print(
-        f"    [{OK}]✓[/] Rendered {len(generated_pages)} pages from structure (no model)\n"
+        f"    [{OK}]{glyph('ok')}[/] Rendered {len(generated_pages)} pages from structure (no model)\n"
     )
 
 
@@ -701,9 +702,9 @@ def _run_cross_repo_analysis(ws_config: Any, root: Any, selected: list[Any], err
             from repowise.core.workspace.update import run_cross_repo_hooks
 
             run_async(run_cross_repo_hooks(ws_config, root, indexed_aliases))
-            console.print(f"  [{OK}]✓[/] Cross-repo analysis complete")
+            console.print(f"  [{OK}]{glyph('ok')}[/] Cross-repo analysis complete")
         except Exception as exc:
-            console.print(f"  [{WARN}]⚠ Cross-repo analysis failed: {exc}[/]")
+            console.print(f"  [{WARN}]{glyph('warn')} Cross-repo analysis failed: {exc}[/]")
 
 
 @dataclass
@@ -1053,7 +1054,7 @@ def _workspace_config(selected: list[Any], root: Path, primary_alias: str, *, dr
         )
     else:
         config_path = ws_config.save(root)
-        console.print(f"  [{OK}]✓[/] Created {config_path.name}")
+        console.print(f"  [{OK}]{glyph('ok')}[/] Created {config_path.name}")
     console.print()
     return ws_config
 

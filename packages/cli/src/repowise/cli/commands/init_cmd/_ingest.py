@@ -136,11 +136,13 @@ def index_repository(run: InitRun) -> bool:
                     )
                 )
         except (PipelineCancelled, KeyboardInterrupt):
-            from repowise.cli.ui.mascot import EYES_SLEEPY, mini
+            from repowise.cli.ui import mascot
 
+            console.print()
             console.print(
-                f"\n{mini(EYES_SLEEPY)} [{WARN}]Interrupted.[/] Indexed work so far has been "
-                "saved — run [bold]repowise init --resume[/] to continue where it stopped."
+                mascot.mini_text(mascot.INTERRUPTED),
+                f"[{WARN}]Interrupted.[/] Indexed work so far is saved. Run "
+                "[bold]repowise init --resume[/] to continue where it stopped.",
             )
             from repowise.cli.hints import maybe_hint
 

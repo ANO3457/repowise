@@ -21,7 +21,8 @@ from repowise.cli.helpers import (
     save_state,
 )
 from repowise.cli.state_persistence import build_kg_state, save_knowledge_graph_json
-from repowise.cli.ui import OK, RichProgressCallback, make_progress, print_stage
+from repowise.cli.ui import OK, RichProgressCallback, make_progress, mascot, print_stage
+from repowise.cli.ui.glyphs import glyph
 from repowise.core.analysis.health import HEALTH_ANALYZER_VERSION
 from repowise.core.analysis.security_scan import SECURITY_SCANNER_VERSION
 from repowise.core.docs_mode import docs_mode_state_fields
@@ -74,7 +75,7 @@ def catch_up_savings(repo_path: Path) -> None:
         return
     if outcome.recorded:
         console.print(
-            f"  [{OK}]✓[/] Recovered {outcome.saved_input_tokens:,} saved tokens "
+            f"  [{OK}]{glyph('ok')}[/] Recovered {outcome.saved_input_tokens:,} saved tokens "
             f"from agent history"
         )
 
@@ -393,15 +394,25 @@ def complete_setup(run: InitRun) -> None:
         provider=run.provider,
         setup=setup_outcome,
         files_written=files_written,
+        owl=_finish_owl(run),
     )
+
+
+def _embed_error(run: InitRun) -> str | None:
+    from repowise.cli.providers import embed_failure_message
+
+    return embed_failure_message(run.scope_embedder, getattr(run.result, "embed_failed_pages", 0))
+
+
+def _finish_owl(run: InitRun) -> str:
+    """Failed when the run is about to exit non-zero, warn when it degraded, else done."""
+    if _embed_error(run):
+        return mascot.FAILED
+    return mascot.WARNED if run.run_warnings else mascot.DONE
 
 
 def raise_on_embed_failure(run: InitRun) -> None:
     """Exit non-zero when embedding failed; raised last so everything else is kept."""
-    from repowise.cli.providers import embed_failure_message
-
-    embed_error = embed_failure_message(
-        run.scope_embedder, getattr(run.result, "embed_failed_pages", 0)
-    )
+    embed_error = _embed_error(run)
     if embed_error:
         raise click.ClickException(embed_error)
