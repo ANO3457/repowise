@@ -290,10 +290,12 @@ def show_completion(
             console.print(f"  [dim]{_note}[/dim]")
             _print_embed_failure(_embed_failed)
         else:
+            from repowise.core.index_scope import FAST_TO_FULL_COMMAND
+
             console.print(
-                "  [dim]No wiki pages: fast mode indexes the graph and git history only.\n"
-                "  Re-run without [bold]--mode fast[/bold] to render the wiki from "
-                "structure.[/dim]"
+                "  [dim]Index only: fast mode indexes the graph and git history, no "
+                f"documentation.\n  Run [bold]{FAST_TO_FULL_COMMAND}[/bold] to build it from "
+                "code (no key needed).[/dim]"
             )
         for _line in build_status_notes(setup):
             console.print(_line)
@@ -419,8 +421,11 @@ def show_workspace_completion(
     index_only: bool,
     provider: Any,
     docs_outcomes: dict[str, tuple[int, str | None]],
+    run_mode: str = "standard",
 ) -> None:
     """Render the workspace completion panel + per-repo docs status."""
+    from repowise.core.index_scope import fast_to_full_command
+
     metrics: list[tuple[str, str]] = [
         ("Repositories", f"{len(selected) - len(errors)} indexed"),
         ("Total files", f"{total_files:,}"),
@@ -434,7 +439,16 @@ def show_workspace_completion(
     if errors:
         metrics.append(("Errors", f"{len(errors)} repos failed"))
 
-    if index_only or provider is None:
+    if run_mode == "fast":
+        next_steps = [
+            ("repowise serve", "open the workspace dashboard at http://localhost:3000"),
+            ("repowise status --workspace", "show workspace status"),
+            (
+                fast_to_full_command("<repo>"),
+                "build a repo's documentation from code and its full git history (no key)",
+            ),
+        ]
+    elif index_only or provider is None:
         next_steps = [
             ("repowise serve", "open the workspace dashboard at http://localhost:3000"),
             ("repowise status --workspace", "show workspace status"),
@@ -456,7 +470,12 @@ def show_workspace_completion(
     # Honest docs status — print a per-repo summary listing exactly which
     # repos generated pages and which were skipped, so the user never has
     # to discover empty Docs/Overview in the web UI on their own.
-    docs_skipped = [(alias, reason) for alias, (count, reason) in docs_outcomes.items() if reason]
+    # A dry run wrote nothing, so there is nothing to upgrade.
+    docs_skipped = [
+        (alias, reason)
+        for alias, (count, reason) in docs_outcomes.items()
+        if reason and reason != "dry run"
+    ]
     if docs_outcomes:
         console.print("[bold]Docs status[/bold]")
         for alias, (count, reason) in docs_outcomes.items():
@@ -470,7 +489,7 @@ def show_workspace_completion(
             first = docs_skipped[0][0]
             console.print()
             console.print(
-                f"  Run [bold]repowise update --repo {first} --docs[/bold] "
-                "to generate docs for a skipped repo."
+                f"  Run [bold]{fast_to_full_command(first)}[/bold] "
+                "to build documentation for a skipped repo."
             )
         console.print()
