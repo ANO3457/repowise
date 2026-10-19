@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -101,18 +102,19 @@ class TestClaudeMdKGSection:
                 KeyModule(name="src/core", purpose="", file_count=9, owner=None),
             ]
         )
-        rendered = tmpl.render(data=data)
+        rendered = tmpl.render(data=dataclasses.replace(data, sections=frozenset({"key_modules"})))
         assert "### Key modules" in rendered
         assert "- `src/api` — API layer" in rendered
         # No purpose → no dangling separator.
         assert "- `src/core`\n" in rendered
 
     def test_workflow_protocol_follows_the_repo_facts(self, jinja_env):
-        from repowise.core.generation.editor_files.data import HotspotFile
+        from repowise.core.generation.editor_files.data import HotspotFile, PackageRow
 
         tmpl = jinja_env.get_template("claude_md.j2")
         hot = HotspotFile(path="src/a.py", churn_percentile=99.0, commit_count_90d=3, owner=None)
-        rendered = tmpl.render(data=self._data(entry_points=["src/main.py"], hotspots=[hot]))
+        pkg = PackageRow(path="src", role="", language="python", file_count=3)
+        rendered = tmpl.render(data=self._data(packages=[pkg], hotspots=[hot]))
         assert "### How to work in this repo" in rendered
         # The load-bearing trust and basis clauses stay; the rest of the old
         # bullets ride in the responses themselves (`_meta` hints, stale warnings).
@@ -127,7 +129,7 @@ class TestClaudeMdKGSection:
         assert "`get_answer(question)`" in rendered
         # Repo facts lead: they are what an agent acts on before an edit.
         protocol = rendered.index("### How to work in this repo")
-        assert rendered.index("### Entry points") < protocol
+        assert rendered.index("### Code layout") < protocol
         assert rendered.index("### Files that need care") < protocol
 
     def test_the_full_protocol_is_opt_in(self, jinja_env):

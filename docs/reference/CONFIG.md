@@ -421,10 +421,12 @@ editor_files:
   sections: ["+commands", "+fix_first"]
 ```
 
-- Default: `architecture`, `key_modules`, `entry_points`, `hotspots`, `health`
-  (score and worst file), `decisions` (top three titles), `how_to_work` (three
+- Default: `packages` (one row per package, or per top-level source directory
+  in a single-package repo, with its entry point), `hotspots`, `health` (score
+  and worst file), `decisions` (top three titles), `how_to_work` (three
   bullets), `tools`.
-- Opt-in: `code_health` (all health signals, replaces `health`), `fix_first`,
+- Opt-in: `architecture`, `key_modules`, `entry_points` (the wiki-derived
+  sections), `code_health` (all health signals, replaces `health`), `fix_first`,
   `commands` (build/test/lint read from manifests), `how_to_work_full`.
 
 ### The `decisions:` block

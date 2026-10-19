@@ -124,9 +124,10 @@ only the queries the chosen sections render. Both templates include the shared
 | Section | Default | Source | Cap |
 |---------|---------|--------|-----|
 | Header | always | Date and commit; a `Scope:` line only when the index lacks a model, has essential Git history only, or has a model upgrade pending | — |
-| `architecture` | on | First 4 sentences from the `repo_overview` wiki page | 4 sentences |
-| `key_modules` | on | `module_page` pages by PageRank desc | Top 10 |
-| `entry_points` | on | The curated `kg_project_meta` list, else `is_entry_point` nodes ranked on execution-start evidence | Top 6 |
+| `packages` | on | `editor_files/packages.py`: package roots from declared manifests (the C4 container rule), or top-level source directories in a single-package repo; role from model-written module prose, else the manifest description; the first orientation entry point under each row. Works on a keyless index | Top 12 by files |
+| `architecture` | off | First 4 sentences from the `repo_overview` wiki page | 4 sentences |
+| `key_modules` | off | `module_page` pages by PageRank desc | Top 10 |
+| `entry_points` | off | The curated `kg_project_meta` list, else `is_entry_point` nodes ranked on execution-start evidence | Top 6 |
 | `hotspots` | on | `git_metadata` bug magnets and hotspots, fix history first, with the last fix date | Top 5 |
 | `health` | on | Health score, band and worst file | 1 line |
 | `code_health` | off | Every health signal (replaces `health`) | 1 line |

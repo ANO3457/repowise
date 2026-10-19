@@ -17,20 +17,19 @@ import structlog
 log = structlog.get_logger(__name__)
 
 DEFAULT_SECTIONS: frozenset[str] = frozenset(
+    {"packages", "hotspots", "health", "decisions", "how_to_work", "tools"}
+)
+
+OPT_IN_SECTIONS: frozenset[str] = frozenset(
     {
         "architecture",
         "key_modules",
         "entry_points",
-        "hotspots",
-        "health",
-        "decisions",
-        "how_to_work",
-        "tools",
+        "code_health",
+        "fix_first",
+        "commands",
+        "how_to_work_full",
     }
-)
-
-OPT_IN_SECTIONS: frozenset[str] = frozenset(
-    {"code_health", "fix_first", "commands", "how_to_work_full"}
 )
 
 ALL_SECTIONS: frozenset[str] = DEFAULT_SECTIONS | OPT_IN_SECTIONS

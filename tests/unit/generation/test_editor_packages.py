@@ -359,3 +359,19 @@ async def test_fetcher_builds_rows_from_the_store(session, tmp_path):
     ]
     data = await fetcher.fetch()
     assert data.packages == rows and data.packages_omitted == 0
+
+
+def test_rows_too_small_to_show_do_not_stop_the_opening():
+    # One root package: its two shown directories are not enough to orient by,
+    # and the tiny ones that would make four rows are left out anyway.
+    files = [
+        *_files("python", *(f"app/api/m{i}.py" for i in range(40))),
+        *_files("python", *(f"app/front/m{i}.py" for i in range(30))),
+        *_files("javascript", *(f"static/js/m{i}.js" for i in range(10))),
+        *_files("python", "tools_a/x.py", "tools_b/y.py"),
+        *_files("text", "requirements.txt"),
+    ]
+    rows, omitted = build_package_rows(files, ["requirements.txt"], [], [])
+
+    assert _paths(rows) == ["app/api", "app/front", "static/js"]
+    assert omitted == 2

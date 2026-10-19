@@ -79,14 +79,14 @@ def build_package_rows(
     for path in language:
         if path in owner:
             heads[owner[path]].append(path)
-    heads, opened = _widened(dict(heads))
+    floor = len(language) * _MINOR_SHARE
+    heads, opened = _widened(dict(heads), floor)
     if not heads:
         return [], 0
     # An opened root's row holds only the files beside its manifest, not the package.
     packages = {h for h in heads if h in root_manifests and h not in opened}
 
     by_size = sorted(heads, key=lambda h: (-len(heads[h]), h))
-    floor = len(language) * _MINOR_SHARE
     kept = [h for h in by_size if h in packages or len(heads[h]) >= floor][:cap]
     kept = kept or by_size[:1]
     prose = _page_roles(module_pages)
@@ -108,21 +108,29 @@ def build_package_rows(
     return rows, len(heads) - len(kept)
 
 
-def _widened(heads: dict[str, list[str]]) -> tuple[dict[str, list[str]], set[str]]:
+def _widened(
+    heads: dict[str, list[str]], floor: float
+) -> tuple[dict[str, list[str]], set[str]]:
     """Open a lone root, or a monorepo's root catch-all, into its subdirectories.
 
-    Files directly at the root of a monorepo are build glue and are dropped. A
-    lone root keeps opening its largest directory until there are
-    ``_ROW_FLOOR`` rows; an opened directory stays a row for the files directly
-    in it. Returns the rows and the directories that were opened.
+    Files directly at the root of a monorepo are build glue and are dropped.
+    Then, while fewer than ``_ROW_FLOOR`` rows clear *floor*, the largest row that
+    is not itself a package keeps opening; an opened directory stays a row for
+    the files directly in it. Returns the rows and the directories that were opened.
     """
     opened: set[str] = set()
+    packages: set[str] = set()
     if len(heads) > 1:
+        packages = set(heads) - {""}
         if "" in heads:
             heads.update(_children("", heads.pop("")))
-        return heads, opened
-    while len(heads) < _ROW_FLOOR:
-        openable = {h: c for h in heads if h not in opened and (c := _children(h, heads[h]))}
+    # Rows below *floor* are not shown, so they do not count toward the floor.
+    while sum(len(paths) >= floor for paths in heads.values()) < _ROW_FLOOR:
+        openable = {
+            h: c
+            for h in heads
+            if h not in opened and h not in packages and (c := _children(h, heads[h]))
+        }
         if not openable:
             break
         widest = max(openable, key=lambda h: (len(heads[h]), h))

@@ -11,6 +11,7 @@ from repowise.core.generation.editor_files.data import (
     EditorFileData,
     HotspotFile,
     KeyModule,
+    PackageRow,
 )
 from repowise.core.generation.editor_files.sections import (
     ALL_SECTIONS,
@@ -88,6 +89,18 @@ def _full_data(**kw) -> EditorFileData:
         "architecture_summary": "A demo service.",
         "key_modules": [KeyModule(name="src/api", purpose="HTTP layer", file_count=4, owner=None)],
         "entry_points": ["src/main.py"],
+        "packages": [
+            PackageRow(
+                path="src/api",
+                role="HTTP layer",
+                language="python",
+                file_count=12,
+                entry_point="src/api/app.py",
+                name="demo-api",
+            ),
+            PackageRow(path="src/jobs", role="", language="", file_count=1),
+        ],
+        "packages_omitted": 2,
         "hotspots": [
             HotspotFile(
                 path="src/api/routes.py",
@@ -117,6 +130,7 @@ def _full_data(**kw) -> EditorFileData:
 
 
 _HEADINGS = {
+    "packages": "### Code layout",
     "architecture": "### Architecture",
     "key_modules": "### Key modules",
     "entry_points": "### Entry points",
@@ -165,7 +179,8 @@ def test_the_opt_in_sections_bring_the_detail_back(gen):
 
 def test_repo_facts_lead_the_block(gen):
     rendered = gen.render(_full_data())
-    order = [rendered.index(_HEADINGS[s]) for s in ("hotspots", "health", "how_to_work", "tools")]
+    lead = ("packages", "hotspots", "health", "how_to_work", "tools")
+    order = [rendered.index(_HEADINGS[s]) for s in lead]
     assert order == sorted(order)
 
 
@@ -218,3 +233,15 @@ def test_the_shared_body_differs_only_in_the_read_note():
         "Claude Code requires a raw Read of any file you will Edit, and that Read is correct and expected.",
         "Reading a file before you edit it is correct and expected.",
     ) == agents
+
+
+def test_package_rows_fold_in_entry_points(gen):
+    rendered = gen.render(_full_data())
+    assert (
+        "- `src/api` (demo-api): HTTP layer · python, 12 files · entry `src/api/app.py`"
+        in rendered
+    )
+    assert "- `src/jobs`: 1 file\n" in rendered
+    assert "- 2 smaller ones not shown." in rendered
+    # Entry points ride on their package rows, so the old list is opt-in.
+    assert "### Entry points" not in rendered

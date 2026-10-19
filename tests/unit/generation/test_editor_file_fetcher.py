@@ -203,7 +203,7 @@ async def test_fetch_architecture_summary(session, repo, tmp_path):
     await _add_page(session, repo.id, "repo_overview:.", "repo_overview", ".", content)
     await session.commit()
 
-    fetcher = EditorFileDataFetcher(session, repo.id, tmp_path)
+    fetcher = EditorFileDataFetcher(session, repo.id, tmp_path, sections=["architecture"])
     data = await fetcher.fetch()
 
     assert data.architecture_summary != ""
@@ -216,7 +216,7 @@ async def test_fetch_entry_points(session, repo, tmp_path):
     await _add_graph_node(session, repo.id, "src/utils.py", is_entry_point=False)
     await session.commit()
 
-    fetcher = EditorFileDataFetcher(session, repo.id, tmp_path)
+    fetcher = EditorFileDataFetcher(session, repo.id, tmp_path, sections=["entry_points"])
     data = await fetcher.fetch()
 
     assert "src/main.py" in data.entry_points
@@ -236,7 +236,7 @@ async def test_fetch_entry_points_breaks_ties_on_pagerank(session, repo, tmp_pat
     await _add_graph_node(session, repo.id, "src/high.py", is_entry_point=True, pagerank=0.9)
     await session.commit()
 
-    fetcher = EditorFileDataFetcher(session, repo.id, tmp_path)
+    fetcher = EditorFileDataFetcher(session, repo.id, tmp_path, sections=["entry_points"])
     data = await fetcher.fetch()
 
     assert data.entry_points[0] == "src/high.py"
@@ -252,7 +252,7 @@ async def test_fetch_entry_points_ranks_execution_start_above_pagerank(session, 
     await _add_graph_node(session, repo.id, "src/main.py", is_entry_point=True, pagerank=0.01)
     await session.commit()
 
-    fetcher = EditorFileDataFetcher(session, repo.id, tmp_path)
+    fetcher = EditorFileDataFetcher(session, repo.id, tmp_path, sections=["entry_points"])
     data = await fetcher.fetch()
 
     assert data.entry_points == ["src/main.py", "src/types/index.ts"]
@@ -276,7 +276,7 @@ async def test_fetch_entry_points_prefers_curated_list(session, repo, tmp_path):
     )
     await session.commit()
 
-    fetcher = EditorFileDataFetcher(session, repo.id, tmp_path)
+    fetcher = EditorFileDataFetcher(session, repo.id, tmp_path, sections=["entry_points"])
     data = await fetcher.fetch()
 
     assert data.entry_points == ["src/cli/main.py"]
