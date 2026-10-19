@@ -122,8 +122,11 @@ class EditorFileDataFetcher:
         # below it. Fall back to the shell-out only when the column is empty
         # (pre-backfill indexes).
         stored_commit = ((repo.head_commit or "")[:7]) if repo else ""
+        entry_points = (
+            await self._get_entry_points(limit=None) if s & {"packages", "entry_points"} else []
+        )
         packages, packages_omitted = (
-            await self._get_packages() if "packages" in s else ([], 0)
+            await self._get_packages(entry_points) if "packages" in s else ([], 0)
         )
 
         return EditorFileData(
@@ -134,7 +137,7 @@ class EditorFileDataFetcher:
                 await self._get_architecture_summary() if "architecture" in s else ""
             ),
             key_modules=await self._get_key_modules() if "key_modules" in s else [],
-            entry_points=await self._get_entry_points() if "entry_points" in s else [],
+            entry_points=entry_points[:_MAX_ENTRY_POINTS] if "entry_points" in s else [],
             tech_stack=detect_tech_stack(self._repo_path),
             hotspots=await self._get_hotspots() if "hotspots" in s else [],
             decisions=await self._get_decisions() if "decisions" in s else [],
@@ -621,11 +624,12 @@ class EditorFileDataFetcher:
         )
         return {row[0]: row[1] for row in result.all()}
 
-    async def _get_packages(self) -> tuple[list[PackageRow], int]:
+    async def _get_packages(self, entry_points: list[str]) -> tuple[list[PackageRow], int]:
         """One row per package, and how many were left out; see :mod:`.packages`."""
         from .packages import CODE_LANGUAGES, build_package_rows  # it imports this module
 
         # Only rows that can count or mark a package root: production code and manifests.
+        # Prefilters only: ``is_manifest`` re-checks the exact basename.
         manifest_like = [GraphNode.node_id.ilike(f"%{n}") for n in sorted(MANIFEST_BASENAMES)]
         manifest_like += [GraphNode.node_id.ilike(f"%{s}") for s in MANIFEST_SUFFIXES]
         files = await self._session.execute(
@@ -655,12 +659,13 @@ class EditorFileDataFetcher:
                 Page.page_type == "module_page",
                 Page.freshness_status != "tombstone",
             )
+            .order_by(Page.target_path, Page.id)
         )
         return build_package_rows(
             [tuple(row) for row in files.all()],
             [m for (m,) in manifests.all() if m],
             pages.all(),
-            await self._get_entry_points(limit=None),
+            entry_points,
             repo_root=self._repo_path,
         )
 

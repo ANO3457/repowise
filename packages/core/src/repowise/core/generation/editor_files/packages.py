@@ -187,7 +187,8 @@ def _page_roles(module_pages: Iterable[Any]) -> dict[str, str]:
         if _is_template(page):
             continue
         text = page.summary or page.content or ""
-        roles[page.target_path or ""] = _clause(_extract_sentences(text, max_sentences=1))
+        path = "" if page.target_path in (None, ".") else page.target_path
+        roles[path] = _clause(_extract_sentences(text, max_sentences=1))
     return roles
 
 

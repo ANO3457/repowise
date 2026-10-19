@@ -124,7 +124,7 @@ only the queries the chosen sections render. Both templates include the shared
 | Section | Default | Source | Cap |
 |---------|---------|--------|-----|
 | Header | always | Date and commit; a `Scope:` line only when the index lacks a model, has essential Git history only, or has a model upgrade pending | — |
-| `packages` | on | `editor_files/packages.py`: package roots from declared manifests (the C4 container rule), or top-level source directories in a single-package repo; role from model-written module prose, else the manifest description; the first orientation entry point under each row. Works on a keyless index | Top 12 by files |
+| `packages` | on | `editor_files/packages.py`: package roots from declared manifests (the C4 container rule), or top-level source directories in a single-package repo; role from model-written module prose, else the manifest description; the first orientation entry point under each row. Works on a keyless index | Top 12 by file count, listed by path |
 | `architecture` | off | First 4 sentences from the `repo_overview` wiki page | 4 sentences |
 | `key_modules` | off | `module_page` pages by PageRank desc | Top 10 |
 | `entry_points` | off | The curated `kg_project_meta` list, else `is_entry_point` nodes ranked on execution-start evidence | Top 6 |

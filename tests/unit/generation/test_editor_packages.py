@@ -350,7 +350,8 @@ async def test_fetcher_builds_rows_from_the_store(session, tmp_path):
     await session.flush()
 
     fetcher = EditorFileDataFetcher(session, repo.id, tmp_path)
-    rows, omitted = await fetcher._get_packages()
+    data = await fetcher.fetch()
+    rows, omitted = data.packages, data.packages_omitted
 
     assert omitted == 0
     assert rows == [
@@ -387,3 +388,9 @@ def test_a_localisation_key_is_not_a_role(tmp_path):
     rows, _ = build_package_rows(files, manifests, [], [], repo_root=tmp_path)
 
     assert rows[0].path == "ext" and rows[0].role == ""
+
+def test_a_root_page_stored_as_dot_speaks_for_the_root_row():
+    files = [*_files("go", "main.go", "util.go"), *_files("go", "go.mod")]
+    rows, _ = build_package_rows(files, ["go.mod"], [_page(".", "Serves the HTTP API.")], [])
+
+    assert [(r.path, r.role) for r in rows] == [(".", "Serves the HTTP API")]
