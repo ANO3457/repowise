@@ -741,15 +741,6 @@ def upgrade_to_full(
 
     provider = _resolve_upgrade_provider(provider_name, model, repo_path, state)
     keyless = provider is None
-    persisted_provider = state.get("provider") or cfg.get("provider")
-    persisted_model = state.get("model") or cfg.get("model")
-    provider_reused = (
-        not keyless
-        and provider_name is None
-        and model is None
-        and persisted_provider == provider.provider_name
-        and persisted_model == provider.model_name
-    )
 
     config = GenerationConfig.from_repo_config(
         cfg,
@@ -767,17 +758,7 @@ def upgrade_to_full(
     commit_limit = cfg.get("commit_limit")
     follow_renames = bool(cfg.get("follow_renames", False))
 
-    console.print(f"[bold]{FAST_TO_FULL_COMMAND}[/bold]: upgrading {repo_path}")
-    if keyless:
-        console.print(
-            "No model configured: documentation is built from code "
-            "[dim](no model calls, no spend)[/dim]."
-        )
-    else:
-        console.print(
-            f"Provider: [cyan]{provider.provider_name}[/cyan] / "
-            f"[cyan]{provider.model_name}[/cyan]. This writes documentation for the whole repo."
-        )
+    _announce_upgrade(repo_path, provider)
     embedder_name = _keyless_embedder_name(cfg) if keyless else _upgrade_embedder_name(cfg)
 
     # The same single-flight lock as an incremental update: a concurrent
@@ -796,13 +777,11 @@ def upgrade_to_full(
     # Released when this function returns (success, cost-gate Abort or failure),
     # not at process exit.
     try:
-        provider_block = {
-            "name": None if keyless else provider.provider_name,
-            "model": None if keyless else provider.model_name,
-            "embedder": embedder_name,
-            "reused": provider_reused,
-            "model_cost_possible": not keyless,
-        }
+        provider_block = _provider_block(
+            provider,
+            embedder_name,
+            reused=provider_name is None and model is None and _persisted(provider, state, cfg),
+        )
         _start_transition(repo_path, state, cfg, provider_block)
         try:
             upgrade_result = run_async(
@@ -885,6 +864,39 @@ def _resolve_upgrade_provider(
             )
             raise
         return None
+
+
+def _announce_upgrade(repo_path: Path, provider: Any | None) -> None:
+    console.print(f"[bold]{FAST_TO_FULL_COMMAND}[/bold]: upgrading {repo_path}")
+    if provider is None:
+        console.print(
+            "No model configured: documentation is built from code "
+            "[dim](no model calls, no spend)[/dim]."
+        )
+        return
+    console.print(
+        f"Provider: [cyan]{provider.provider_name}[/cyan] / "
+        f"[cyan]{provider.model_name}[/cyan]. This writes documentation for the whole repo."
+    )
+
+
+def _persisted(provider: Any | None, state: dict[str, Any], cfg: dict[str, Any]) -> bool:
+    """Whether *provider* is the one this repo already recorded."""
+    return provider is not None and (
+        (state.get("provider") or cfg.get("provider")) == provider.provider_name
+        and (state.get("model") or cfg.get("model")) == provider.model_name
+    )
+
+
+def _provider_block(provider: Any | None, embedder_name: str | None, *, reused: bool) -> dict:
+    """The scope's provider record; a keyless run names no provider and no cost."""
+    return {
+        "name": provider.provider_name if provider is not None else None,
+        "model": provider.model_name if provider is not None else None,
+        "embedder": embedder_name,
+        "reused": reused,
+        "model_cost_possible": provider is not None,
+    }
 
 
 def _template_provider() -> Any:
