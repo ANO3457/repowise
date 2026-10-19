@@ -167,27 +167,29 @@ def _relative(repo_path: Path, paths: list[Path]) -> list[str]:
     return out
 
 
-def _footer(
-    facts: FinishFacts, setup: Any, repo_path: Path, files_written: list[Path]
-) -> list[RenderableType]:
-    lines: list[RenderableType] = []
+def _search_lines(facts: FinishFacts) -> list[RenderableType]:
+    """The command that turns semantic search on, when documentation exists without it."""
     search = facts.scope.get("search") or {}
     if facts.embed_failed:
-        lines.append(
+        return [
             _line(
                 f"[{WARN}]Semantic search is unavailable:[/] embedding failed for "
                 f"{facts.embed_failed} page(s). See the warning above, then run "
                 "[bold]repowise reindex[/bold]."
             )
-        )
-    elif facts.pages and search.get("semantic") != "available":
-        command = search.get("next_command") or "repowise reindex"
-        lines.append(
-            _dim(
-                f"Semantic search is off: [bold]{command}[/bold] turns it on "
-                "(Ollama needs no key)."
-            )
-        )
+        ]
+    if not facts.pages or search.get("semantic") == "available":
+        return []
+    command = search.get("next_command") or "repowise reindex"
+    return [
+        _dim(f"Semantic search is off: [bold]{command}[/bold] turns it on (Ollama needs no key).")
+    ]
+
+
+def _footer(
+    facts: FinishFacts, setup: Any, repo_path: Path, files_written: list[Path]
+) -> list[RenderableType]:
+    lines = _search_lines(facts)
     if files_written:
         lines.append(
             _dim(
