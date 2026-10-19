@@ -42,7 +42,6 @@ class PipelineRun:
     on_page_ready: Any
     resume_controller: Any
     coverage_report_paths: list[Path] | None
-    no_model_reason: str | None
 
     # Index phase outputs.
     skip_index: bool = False

@@ -24,6 +24,10 @@ from repowise.core.pipeline.progress import ProgressCallback
 
 from ._common import _phase_done
 
+# Shown for the model-only decision sources of a deterministic run, which may
+# well have a key configured.
+STRUCTURAL_RUN_REASON = "this run builds from code; repowise generate adds them"
+
 logger = structlog.get_logger(__name__)
 
 
@@ -595,7 +599,10 @@ def _decision_sources_not_run(
     Broad discovery is always considered; its own reason overrides the policy's
     as the more specific one.
     """
-    runtime = {rt.key: rt for rt in policy.runtime(provider_available=provider_available)}
+    runtime = {
+        rt.key: _with_no_model_reason(rt, no_model_reason)
+        for rt in policy.runtime(provider_available=provider_available)
+    }
     not_run = {
         key
         for key, rt in runtime.items()
@@ -603,16 +610,14 @@ def _decision_sources_not_run(
     }
     if discovery.report.status in ("not_run", "skipped_no_provider"):
         not_run.add(DISCOVERY_SOURCE)
-    if discovery.report.reason:
-        runtime[DISCOVERY_SOURCE] = replace(
-            runtime[DISCOVERY_SOURCE], reason=discovery.report.reason
-        )
-    if no_model_reason:
-        if discovery.report.status == "skipped_no_provider":
-            runtime[DISCOVERY_SOURCE] = replace(
-                runtime[DISCOVERY_SOURCE], reason=no_model_reason
-            )
-        for key, rt in runtime.items():
-            if rt.status == "skipped_no_provider":
-                runtime[key] = replace(rt, reason=no_model_reason)
+    discovery_reason = _with_no_model_reason(discovery.report, no_model_reason).reason
+    if discovery_reason:
+        runtime[DISCOVERY_SOURCE] = replace(runtime[DISCOVERY_SOURCE], reason=discovery_reason)
     return runtime, not_run
+
+
+def _with_no_model_reason(status: Any, no_model_reason: str | None) -> Any:
+    """*status* with *no_model_reason* when no model was chosen rather than missing."""
+    if no_model_reason and status.status == "skipped_no_provider":
+        return replace(status, reason=no_model_reason)
+    return status
