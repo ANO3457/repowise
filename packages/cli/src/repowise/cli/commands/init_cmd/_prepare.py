@@ -36,7 +36,12 @@ from repowise.core.docs_mode import resolve_docs_mode
 from repowise.core.generation.styles import resolve_style
 
 from ._options import InitOptions, InitRun
-from ._provider import announce_index_only, decision_key_in_env, resolve_docs_provider
+from ._provider import (
+    announce_index_only,
+    decision_key_in_env,
+    note_subscription_cli,
+    resolve_docs_provider,
+)
 from ._questions import _ask_questions
 from .persistence import effective_run_mode_for_resume
 
@@ -206,6 +211,7 @@ def _resolve_provider_stage(run: InitRun) -> None:
         announce_index_only(run)
     else:
         resolve_docs_provider(run)
+    note_subscription_cli(run)
 
 
 def _prepare_single_repo(opts: InitOptions, repo_path: Path, start: float) -> InitRun | None:

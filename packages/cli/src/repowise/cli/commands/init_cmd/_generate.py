@@ -7,6 +7,7 @@ from typing import Any
 
 from rich.table import Table
 
+from repowise.cli.cost_gate import spend_phrase
 from repowise.cli.helpers import console, load_config, warn
 from repowise.cli.ui import BRAND, VALUE, print_phase_header
 from repowise.core.generation.styles import DEFAULT_STYLE
@@ -16,7 +17,6 @@ from .generation import (
     concept_page_count,
     cost_gate_declined,
     estimate_generation,
-    format_cost,
     page_type_label,
     run_repo_generation,
     structural_page_summary,
@@ -195,11 +195,12 @@ def _print_generation_plan(
         lang_parts = [f"{lang} {pct:.0%}" for lang, pct in lang_items]
         console.print(f"  Languages: {', '.join(lang_parts)}")
 
-    # Warn when a local provider runs with default concurrency
+    # An agent CLI bounds its own process count (its estimate says so), so
+    # only a local model server needs the advice to lower --concurrency.
     from repowise.core.providers.llm.specs import PROVIDER_SPECS
 
     spec = PROVIDER_SPECS.get(provider.provider_name)
-    if spec is not None and spec.local and concurrency > 4:
+    if spec is not None and spec.local and not spec.agent and concurrency > 4:
         warn(
             f"  {provider.provider_name} is a local provider "
             f"running with concurrency={concurrency}. "
@@ -286,7 +287,7 @@ def _run_generation_phase(
     concept_n = concept_page_count(plans)
     console.print(
         f"  Writing [bold]{concept_n:,}[/bold] subsystem pages with "
-        f"[{VALUE}]{provider.model_name}[/]. Estimated [bold]{format_cost(est)}[/bold]."
+        f"[{VALUE}]{provider.model_name}[/]. {spend_phrase(est, concurrency)}."
     )
     structural = structural_page_summary(plans)
     if structural:

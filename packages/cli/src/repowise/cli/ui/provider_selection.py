@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import functools
 import os
-import re
 import socket
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -19,6 +18,7 @@ from rich.table import Table
 from repowise.cli.errors import reasoned_error
 from repowise.cli.ui.brand import BRAND, BRAND_STYLE, OK, VALUE, WARN
 from repowise.cli.ui.env_persistence import _save_key_to_dotenv
+from repowise.cli.ui.model_tier import is_flagship_model
 from repowise.cli.ui.openai_compatible import (
     discover_models as _discover_openai_compatible_models,
 )
@@ -27,6 +27,11 @@ from repowise.cli.ui.openai_compatible import (
 )
 from repowise.cli.ui.openai_compatible import (
     prompt_setup as _prompt_openai_compatible_setup_values,
+)
+from repowise.cli.ui.subscription import (
+    agent_cli_status,
+    ready_agent_providers,
+    subscription_estimate,
 )
 from repowise.core.agents.identity import get_identity, identity_for_provider
 from repowise.core.providers.llm.base import ProviderModelOption
@@ -75,18 +80,6 @@ class ProviderSelection:
     provider_name: str
     model: str
     reasoning: ReasoningMode = "auto"
-
-
-def _agent_cli_status(name: str) -> tuple[bool, bool]:
-    """``(installed, ready)`` for the agent CLI behind provider *name*.
-
-    Ready means signed in where the CLI can say so cheaply, else installed:
-    an unauthenticated CLI without such a query surfaces on first use.
-    """
-    agent = identity_for_provider(name)
-    if agent is None or not agent.is_installed():
-        return False, False
-    return True, agent.is_logged_in()
 
 
 def agent_providers_set_up(repo_path: Path | None) -> tuple[str, ...]:
@@ -165,38 +158,46 @@ def _detect_ollama_status() -> bool:
         return False
 
 
-def _detect_provider_status() -> dict[str, str]:
+def _detect_provider_status(repo_path: Path | None = None) -> dict[str, str]:
     """Return {provider: what makes it ready} for providers that can be used now.
 
-    The value is the env var carrying the key for the hosted providers, and a
-    short description of the out-of-band credential for the local ones. Only
-    truthiness is load-bearing; the value is for debugging.
+    Ordered like auto-detection, so the first entry is what ``--yes`` would
+    run: keyed providers first, read from the same process env, repo
+    ``.repowise/.env`` and stored keys, then keys for providers auto-detection
+    skips, then logged-in agent CLIs, then a reachable Ollama. Only order and
+    truthiness are load-bearing; the value is for debugging.
     """
+    from repowise.core.providers.llm.resolve import (
+        credentialed_providers,
+        repo_getenv,
+        resolve_api_key,
+    )
+
     status: dict[str, str] = {}
-    openai_base_url = (os.environ.get("OPENAI_BASE_URL") or "").rstrip("/")
-    openai_has_key = bool((os.environ.get("OPENAI_API_KEY") or "").strip())
+    ollama_up = _detect_ollama_status()
+    base_url = (repo_getenv(repo_path)("OPENAI_BASE_URL") or "").rstrip("/")
+    keyed = credentialed_providers(repo_path)
+    for prov in keyed:
+        if prov not in _PICKER_SPECS or (prov == "ollama" and not ollama_up):
+            continue
+        if prov == "openai" and base_url not in ("", _OPENAI_DEFAULT_BASE_URL):
+            status[_OPENAI_COMPATIBLE_CHOICE] = _PROVIDER_ENV[prov]
+        else:
+            status[prov] = _PROVIDER_ENV.get(prov) or ollama_base_url()
     for prov, spec in _PICKER_SPECS.items():
-        env_var = _PROVIDER_ENV.get(prov, "")
-        if spec.agent:
-            if _agent_cli_status(prov)[1]:
-                status[prov] = "agent CLI"
-        elif prov == "ollama":
-            if _detect_ollama_status():
-                status[prov] = ollama_base_url()
-        elif prov == "openai":
-            if openai_has_key and openai_base_url in ("", _OPENAI_DEFAULT_BASE_URL):
-                status[prov] = env_var
-            elif openai_has_key and openai_base_url:
-                status[_OPENAI_COMPATIBLE_CHOICE] = env_var
-        elif any(os.environ.get(name) for name in spec.api_key_envs):
-            status[prov] = env_var
+        if prov not in keyed and not spec.agent and resolve_api_key(prov, repo_path)[0]:
+            status[prov] = _PROVIDER_ENV[prov]
+    for prov in ready_agent_providers():
+        status[prov] = "agent CLI"
+    if ollama_up:
+        status.setdefault("ollama", ollama_base_url())
     return status
 
 
 def _agent_cli_setup_lines(name: str) -> list[str]:
     agent = identity_for_provider(name)
     assert agent is not None, name
-    installed, _ = _agent_cli_status(name)
+    installed, _ = agent_cli_status(name)
     problem = (
         f"{agent.display_name} CLI is on PATH but not logged in."
         if installed
@@ -260,14 +261,18 @@ def _interactive_provider_name(
     repo_path: Path | None = None,
     save_key: bool = True,
     prefer: tuple[str, ...] = (),
+    model_calls: int | None = None,
+    concurrency: int = 10,
 ) -> str:
     """Show provider table, handle selection + inline key entry + save.
 
     The first ready provider in *prefer* (see :func:`agent_providers_set_up`)
-    becomes the default. Returns the chosen provider name.
+    becomes the default, else the one auto-detection would pick. With
+    *model_calls*, a ready agent CLI is shown with its quota and time
+    estimate. Returns the chosen provider name.
     """
     providers = list(_PROVIDER_CHOICES)  # gemini first
-    detected = _detect_provider_status()
+    detected = _detect_provider_status(repo_path)
 
     # --- provider table ---
     table = Table(
@@ -300,6 +305,12 @@ def _interactive_provider_name(
 
     console.print()
     console.print(table)
+    # A subscription run costs quota and time, not dollars: say how much.
+    if model_calls:
+        for prov in detected:
+            if _PICKER_SPECS.get(prov) is not None and _PICKER_SPECS[prov].agent:
+                estimate = subscription_estimate(prov, model_calls, concurrency)
+                console.print(f"  [dim]{prov} {estimate}.[/dim]")
     console.print(
         "  [dim]mock is flag-only (writes placeholder pages): repowise init --provider mock[/dim]"
     )
@@ -307,12 +318,8 @@ def _interactive_provider_name(
 
     # --- selection ---
     valid_choices = [str(i) for i in range(1, len(providers) + 1)]
-    # Default: first detected provider, or gemini (index 1)
-    default_idx = "1"
-    for idx, prov in enumerate(providers, 1):
-        if prov in detected:
-            default_idx = str(idx)
-            break
+    # Detection order is auto-detection's, so the default is what --yes runs.
+    default_idx = str(providers.index(next(iter(detected))) + 1) if detected else "1"
     # The CLI of the agent set up here outranks a key: it is the user's own login.
     recommended = next((name for name in prefer if name in detected), None)
     if recommended is not None:
@@ -359,6 +366,8 @@ def _interactive_provider_name(
                 repo_path=repo_path,
                 save_key=save_key,
                 prefer=prefer,
+                model_calls=model_calls,
+                concurrency=concurrency,
             )
         env_var = _PROVIDER_ENV[chosen]
         signup_url = _PICKER_SPECS[chosen].signup_url
@@ -382,6 +391,8 @@ def _interactive_provider_name(
                 repo_path=repo_path,
                 save_key=save_key,
                 prefer=prefer,
+                model_calls=model_calls,
+                concurrency=concurrency,
             )
 
     if chosen == "openai" and repo_path is not None:
@@ -632,6 +643,8 @@ def interactive_provider_config_select(
     repo_path: Path | None = None,
     save_key: bool = True,
     prefer: tuple[str, ...] = (),
+    model_calls: int | None = None,
+    concurrency: int = 10,
 ) -> ProviderSelection:
     """Show provider/model/reasoning selection for interactive init.
 
@@ -644,6 +657,8 @@ def interactive_provider_config_select(
         repo_path=repo_path,
         save_key=save_key,
         prefer=prefer,
+        model_calls=model_calls,
+        concurrency=concurrency,
     )
     if chosen == _OPENAI_COMPATIBLE_CHOICE:
         return _interactive_openai_compatible_select(
@@ -681,7 +696,7 @@ def interactive_provider_config_select(
             repo_path=repo_path,
         )
 
-    if not model_flag and _is_flagship_model(selected.model):
+    if not model_flag and is_flagship_model(selected.model):
         console.print(
             f"  [{WARN}]Note:[/] [dim]'{selected.model}' works, but flash-lite / haiku / "
             "nano produce equivalent docs at ~10x lower cost on most repos.[/]"
@@ -708,57 +723,6 @@ def interactive_provider_select(
         repo_path=repo_path,
     )
     return selection.provider_name, selection.model
-
-
-# Checked before the flagship tokens: a cheap-tier marker wins even when the
-# family name is a flagship one, so `gpt-5.4-nano` is not mistaken for `gpt-5`.
-_BUDGET_MODEL_TOKENS = (
-    "nano",
-    # OpenAI's 5.6 budget tier carries no cheap-tier word in its name, and
-    # `gpt-5` matches it as flagship. Without this, accepting the default
-    # printed a note advising the user to switch to a cheaper model than the
-    # one they were already on.
-    "luna",
-    "mini",
-    "lite",
-    "haiku",
-    "small",
-    "tiny",
-    "flash",
-    r"\d+b",  # 8b, 3b, 270m-style parameter-count tags
-)
-
-_FLAGSHIP_MODEL_TOKENS = (
-    "opus",
-    "gpt-4o",
-    "gpt-5",
-    "gpt-6",
-    "pro",
-    "sonnet",
-    "ultra",
-    "o1",
-    "o3",
-    "o4",
-)
-
-
-def _matches_token(model: str, tokens: tuple[str, ...]) -> bool:
-    """True if any token appears in ``model`` as a whole dash/dot-delimited word.
-
-    Substring matching is wrong here: ``gemini`` contains ``mini`` and
-    ``gpt-5.4-nano`` contains ``gpt-5``.
-    """
-    return any(re.search(rf"(?<![a-z0-9]){tok}(?![a-z])", model) for tok in tokens)
-
-
-def _is_flagship_model(model: str) -> bool:
-    """Heuristic: True if the model name suggests a flagship-tier model."""
-    if not model:
-        return False
-    m = model.lower().rsplit("/", 1)[-1]
-    if _matches_token(m, _BUDGET_MODEL_TOKENS):
-        return False
-    return _matches_token(m, _FLAGSHIP_MODEL_TOKENS)
 
 
 def _prompt_api_key(

@@ -74,6 +74,7 @@ def _gate_cost(
             format_cost,
             structural_page_summary,
         )
+        from repowise.cli.cost_gate import spend_phrase
         from repowise.core.cost_estimator import build_generation_plan, estimate_cost
 
         plans = build_generation_plan(parsed_files, graph_builder, config)
@@ -83,7 +84,7 @@ def _gate_cost(
         return
 
     pages = sum(p.count for p in plans)
-    console.print(f"Estimated: [bold]{pages}[/bold] pages, [bold]{format_cost(est)}[/bold].")
+    console.print(f"[bold]{pages}[/bold] pages. {spend_phrase(est)}.")
     structural = structural_page_summary(plans)
     if structural:
         console.print(f"  [dim]{structural}[/dim]")
