@@ -62,6 +62,9 @@ class PlanState:
     outside: tuple[str, ...] = ()
     this_repo_only: bool = False
     large_repo: bool = False
+    #: Machine-specific files git would see, and whether Enter excludes them.
+    keep_out: tuple[str, ...] = ()
+    git_exclude: bool = False
 
     @property
     def can_keep_global(self) -> bool:
