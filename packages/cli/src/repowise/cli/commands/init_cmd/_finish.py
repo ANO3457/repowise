@@ -16,6 +16,7 @@ from repowise.cli.helpers import (
     console,
     get_head_commit,
     head_commit_ts,
+    load_config,
     load_state,
     run_async,
     save_config_partial,
@@ -296,8 +297,20 @@ def write_run_state(run: InitRun) -> None:
             max_file_pages=run.max_file_pages,
             include_submodules=opts.include_submodules,
             save_key=opts.save_key,
-            test_run=opts.test_run,
         )
+        _stamp_test_run(run)
+
+
+def _stamp_test_run(run: InitRun) -> None:
+    """Record ``--test-run`` on the model path, which re-reads state from disk.
+
+    Stamped every run, so a whole-repo init clears an earlier sample's mark.
+    """
+    from repowise.core.index_scope import stamp_index_scope
+
+    state = load_state(run.repo_path)
+    stamp_index_scope(state, load_config(run.repo_path), test_run=run.opts.test_run)
+    save_state(run.repo_path, state, full_index=True)
 
 
 def _record_init_outcome(run: InitRun) -> None:

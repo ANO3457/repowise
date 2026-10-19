@@ -83,44 +83,23 @@ def _reject_structural_page_ids(page_ids: tuple[str, ...]) -> None:
         )
 
 
-def _resolve_generate_provider(
-    provider_name: str | None,
-    model: str | None,
-    repo_path: Path,
-    *,
-    reasoning: str | None,
-    yes: bool,
-    dry_run: bool,
+def _dry_run_provider(
+    provider_name: str | None, model: str | None, repo_path: Path, reasoning: str | None
 ) -> Any | None:
-    """The provider this run writes with; ``None`` only for a keyless ``--dry-run``.
+    """The configured provider for a ``--dry-run``, or ``None`` when there is none.
 
-    A dry run never prompts and never needs a key: it uses the configured
-    provider when there is one and otherwise prints the plan without a price.
+    A dry run never prompts and never needs a key; without a provider it prints
+    the plan without a price.
     """
-    if dry_run:
-        try:
-            return resolve_provider_or_prompt(
-                provider_name, model, repo_path, reasoning=reasoning, interactive=False
-            )
-        except click.ClickException as exc:
-            # Only "nothing configured" is keyless; a broken provider is a real error.
-            if getattr(exc, "reason", None) != "no_provider_configured":
-                raise
-            return None
-    # Provider is required since a model writes these pages. On a real terminal, a
-    # missing one drops into init's provider + key prompt and persists the choice,
-    # so a first `generate` onboards the same way init does instead of dying.
-    # Onboarding needs a terminal on both ends: a terminal stdout (so the provider
-    # table renders) and a tty stdin (so the answer can be read). The stdin check
-    # keeps a background hook / CI / agent run from hanging even when it inherits a
-    # FORCE_COLOR that makes console.is_terminal report True; those keep the clean
-    # "No provider configured" error. Unlike the bare-run default, this fires
-    # even with explicit page flags, so a keyless `generate --all` still onboards,
-    # not just a bare `generate`.
-    can_prompt_provider = console.is_terminal and sys.stdin.isatty() and not yes
-    return resolve_provider_or_prompt(
-        provider_name, model, repo_path, reasoning=reasoning, interactive=can_prompt_provider
-    )
+    try:
+        return resolve_provider_or_prompt(
+            provider_name, model, repo_path, reasoning=reasoning, interactive=False
+        )
+    except click.ClickException as exc:
+        # Only "nothing configured" is keyless; a broken provider is a real error.
+        if getattr(exc, "reason", None) != "no_provider_configured":
+            raise
+        return None
 
 
 def _make_gate(dry_run: bool):
@@ -283,9 +262,23 @@ def generate_command(
         console.print(NO_DOCUMENTATION_MESSAGE)
         return
 
-    provider = _resolve_generate_provider(
-        provider_name, model, repo_path, reasoning=reasoning, yes=yes, dry_run=dry_run
-    )
+    if dry_run:
+        provider = _dry_run_provider(provider_name, model, repo_path, reasoning)
+    else:
+        # Provider is required since a model writes these pages. On a real terminal, a
+        # missing one drops into init's provider + key prompt and persists the choice,
+        # so a first `generate` onboards the same way init does instead of dying.
+        # Onboarding needs a terminal on both ends: a terminal stdout (so the provider
+        # table renders) and a tty stdin (so the answer can be read). The stdin check
+        # keeps a background hook / CI / agent run from hanging even when it inherits a
+        # FORCE_COLOR that makes console.is_terminal report True; those keep the clean
+        # "No provider configured" error. Unlike the bare-run default, this fires
+        # even with explicit page flags, so a keyless `generate --all` still onboards,
+        # not just a bare `generate`.
+        can_prompt_provider = console.is_terminal and sys.stdin.isatty() and not yes
+        provider = resolve_provider_or_prompt(
+            provider_name, model, repo_path, reasoning=reasoning, interactive=can_prompt_provider
+        )
 
     console.print(f"[bold]repowise generate[/bold] {repo_path}")
     if provider is not None:

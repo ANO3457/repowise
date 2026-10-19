@@ -161,9 +161,7 @@ class TestGenerateChecksOrder:
             raise reasoned_error("No provider configured.", reason="no_provider_configured")
 
         monkeypatch.setattr(generate_cmd, "resolve_provider_or_prompt", _no_provider)
-        resolved = generate_cmd._resolve_generate_provider(
-            None, None, Path("."), reasoning=None, yes=False, dry_run=True
-        )
+        resolved = generate_cmd._dry_run_provider(None, None, Path("."), None)
         assert resolved is None
 
     def test_a_broken_provider_still_errors(self, monkeypatch) -> None:
@@ -172,9 +170,7 @@ class TestGenerateChecksOrder:
 
         monkeypatch.setattr(generate_cmd, "resolve_provider_or_prompt", _bad)
         with pytest.raises(click.ClickException):
-            generate_cmd._resolve_generate_provider(
-                None, None, Path("."), reasoning=None, yes=False, dry_run=True
-            )
+            generate_cmd._dry_run_provider(None, None, Path("."), None)
 
     def test_the_unpriced_plan_states_pages_and_tokens(self, monkeypatch, tmp_path) -> None:
         import io
@@ -202,23 +198,12 @@ class TestInitTestRun:
         assert result.exit_code == 2
         assert "--test-run limits the model run" in result.output
 
-    def test_a_model_init_records_the_test_run(self) -> None:
-        from repowise.cli.commands.init_cmd.persistence import _stamp_full_init_scope
+    @pytest.mark.parametrize("test_run", [True, False])
+    def test_a_model_init_stamps_the_test_run(self, tmp_path, test_run) -> None:
+        from repowise.cli.commands.init_cmd import _finish
+        from repowise.cli.helpers import load_state, save_state
 
-        state: dict = {}
-        result = SimpleNamespace(
-            health_report=object(),
-            generation_scope={"effective_cap": 1, "eligible": 1, "generated": 1, "omitted": 0},
-            traversal_stats=None,
-            embed_failed_pages=0,
-        )
-        _stamp_full_init_scope(
-            state,
-            result,
-            SimpleNamespace(provider_name="mock", model_name="mock"),
-            resolved_commit_limit=10,
-            max_file_pages=None,
-            embedder_name_resolved="mock",
-            test_run=True,
-        )
-        assert resolve_index_scope(state)["test_run"] is True
+        save_state(tmp_path, {"index_scope": {"test_run": not test_run}})
+        run = SimpleNamespace(repo_path=tmp_path, opts=SimpleNamespace(test_run=test_run))
+        _finish._stamp_test_run(run)
+        assert resolve_index_scope(load_state(tmp_path))["test_run"] is test_run

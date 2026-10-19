@@ -58,6 +58,7 @@ async def has_documentation(repo_path: Path) -> bool:
     error. Unreadable stores answer True so the full run reports the real error.
     """
     from sqlalchemy import func, select
+    from sqlalchemy.exc import SQLAlchemyError
 
     from repowise.cli.helpers import db_configured, get_db_url_for_repo
     from repowise.core.persistence import create_engine, create_session_factory, get_session
@@ -76,7 +77,7 @@ async def has_documentation(repo_path: Path) -> bool:
                 select(func.count()).select_from(Page).where(Page.repository_id == repo.id)
             )
             return bool(count.scalar_one())
-    except Exception:
+    except (OSError, SQLAlchemyError):
         return True
     finally:
         await engine.dispose()
