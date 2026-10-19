@@ -104,6 +104,8 @@ class InitRun:
     # Embedder of the template wiki, None when none was rendered.
     index_only_embedder: str | None = None
     cost_declined: bool = False
+    # Asked-for work a stage could not do; any entry makes init exit degraded.
+    gaps: list[str] = field(default_factory=list)
     effective_index_only: bool = False
     phase_timings: dict[str, float] = field(default_factory=dict)
     scope_embedder: str | None = None

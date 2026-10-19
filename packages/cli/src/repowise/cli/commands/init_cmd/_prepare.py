@@ -179,7 +179,7 @@ def _confirm_wiki_overwrite(run: InitRun) -> bool:
     if not sys.stdin.isatty():
         raise reasoned_error(
             "Refusing to replace a model-written wiki with template pages. "
-            "Re-run with --yes to confirm, or drop --index-only.",
+            "Re-run with --yes to confirm, or drop --no-prose.",
             reason="wiki_overwrite_unconfirmed",
         )
     if not click.confirm("  Replace the written wiki with template pages?", default=False):
