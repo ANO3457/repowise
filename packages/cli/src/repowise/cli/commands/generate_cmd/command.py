@@ -123,8 +123,8 @@ def _make_gate(dry_run: bool, embedder: str | None = None):
         from repowise.cli.commands.init_cmd.generation import (
             cost_gate_blocks,
             embedding_note,
-            format_cost,
         )
+        from repowise.cli.cost_gate import spend_phrase
         from repowise.cli.providers.embedders import resolve_embedding_model
         from repowise.core.cost_estimator import estimate_cost
 
@@ -152,7 +152,7 @@ def _make_gate(dry_run: bool, embedder: str | None = None):
         if est is not None:
             _print_page_line(cost_plans, f" with [cyan]{provider.model_name}[/cyan]")
             print_lane_estimate(decisions, provider)
-            console.print(f"Estimated [bold]{format_cost(est)}[/bold].")
+            console.print(f"{spend_phrase(est)}.")
             embedding = embedding_note(est)
             if embedding:
                 console.print(f"[dim]{embedding}[/dim]")
