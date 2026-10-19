@@ -47,7 +47,6 @@ from ._prepare import (
     _editor_options,
     _interactive_gate,
     _prepare_single_repo,
-    _resolve_decision_provider,
     _resolve_provider_stage,
     _resolve_settings,
     _start_run,
@@ -77,7 +76,6 @@ __all__ = [
     "_prepare_single_repo",
     "_print_structural_plan",
     "_render_template_wiki",
-    "_resolve_decision_provider",
     "_resolve_provider_stage",
     "_resolve_settings",
     "_run_deterministic_generation_phase",
@@ -196,10 +194,11 @@ def _run_workspace_init(opts: InitOptions, scan: Any) -> None:
     default=None,
     help=(
         "Write the subsystem (concept) pages as model prose (needs a key), or "
-        "render the whole wiki from structure with no model and no spend. Every "
-        "other page is structural either way. Default: prose when a key is "
-        "available. With --no-prose, an explicit --provider or API key still "
-        "enables model-based decision extraction. Use --mode fast for no wiki at all."
+        "render the whole wiki from structure. Every other page is structural "
+        "either way. Default: prose when a key is available. --no-prose makes no "
+        "model calls, whatever keys are set: it skips the written subsystem pages "
+        "and model decision extraction from PRs, commit history and code comments. "
+        "Run repowise generate later to add both. Use --mode fast for no wiki at all."
     ),
 )
 @click.option(
