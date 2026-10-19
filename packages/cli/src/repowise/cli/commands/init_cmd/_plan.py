@@ -44,6 +44,7 @@ class _Answers:
     selection: Any = None
     sync: bool = True
     this_repo_only: bool = False
+    git_exclude: bool = False
 
 
 def _outside_lines(run: InitRun) -> tuple[str, ...]:
@@ -70,6 +71,17 @@ def _embedders(run: InitRun) -> tuple[str, str]:
     return template_run_embedder(resolved, requested), resolved
 
 
+def _keep_out(run: InitRun, editor_setup: bool) -> tuple[str, ...]:
+    """Machine-specific files the run leaves visible to git, written now or by this run."""
+    from repowise.cli.editor_setup import planned_project_files
+    from repowise.cli.git_exclude import keep_out_candidates
+
+    from ._prepare import _editor_options
+
+    planned = planned_project_files(run.repo_path, _editor_options(run)) if editor_setup else ()
+    return keep_out_candidates(run.repo_path, planned)
+
+
 def _state(run: InitRun, base: PlanState, answers: _Answers) -> PlanState:
     """The screen for the run as it stands."""
     from repowise.cli.editor_setup import planned_agents
@@ -78,6 +90,7 @@ def _state(run: InitRun, base: PlanState, answers: _Answers) -> PlanState:
 
     free_embedder, model_embedder = _embedders(run)
     agents = planned_agents(run.repo_path, _editor_options(run)) if base.editor_setup else ()
+    keep_out = _keep_out(run, base.editor_setup)
     return replace(
         base,
         run_mode=run.opts.run_mode,
@@ -87,6 +100,8 @@ def _state(run: InitRun, base: PlanState, answers: _Answers) -> PlanState:
         agents=agents,
         sync=answers.sync,
         this_repo_only=answers.this_repo_only,
+        keep_out=keep_out,
+        git_exclude=answers.git_exclude and bool(keep_out),
     )
 
 
@@ -171,6 +186,12 @@ def _edit_plan(run: InitRun, scan: Any, editor_setup: bool, answers: _Answers) -
             "  Keep the index in sync after each commit (post-commit hook)?",
             default=answers.sync,
         )
+    keep_out = _keep_out(run, editor_setup)
+    if keep_out:
+        answers.git_exclude = click.confirm(
+            f"  Keep {', '.join(keep_out)} out of git (adds to .git/info/exclude)?",
+            default=answers.git_exclude,
+        )
 
 
 def _apply(run: InitRun, base: PlanState, answers: _Answers) -> None:
@@ -193,6 +214,7 @@ def _apply(run: InitRun, base: PlanState, answers: _Answers) -> None:
     run.opts = opts
     if base.can_keep_global:
         run.global_mcp_consent = not answers.this_repo_only
+    run.git_exclude = answers.git_exclude
 
 
 def _leave_repo_as_it_was(run: InitRun) -> None:
@@ -224,6 +246,8 @@ def _until_enter(
         elif action == THIS_REPO:
             answers.this_repo_only = not answers.this_repo_only
         else:
+            # What the screen showed: on only while there is something to exclude.
+            answers.git_exclude = state.git_exclude
             return
 
 
