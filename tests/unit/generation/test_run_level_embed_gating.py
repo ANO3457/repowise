@@ -161,3 +161,61 @@ def test_a_failed_embed_batch_is_never_reported_finished() -> None:
 
     asyncio.run(_go())
     assert calls == [(1, False)]
+
+
+class _Phases:
+    def __init__(self) -> None:
+        self.events: list[tuple] = []
+
+    def on_phase_start(self, phase, total):
+        self.events.append(("start", phase, total))
+
+    def on_item_done(self, phase):
+        self.events.append(("item", phase))
+
+    def on_phase_done(self, phase):
+        self.events.append(("done", phase))
+
+    def on_phase_failed(self, phase):
+        self.events.append(("failed", phase))
+
+
+class _Embedder:
+    pass
+
+
+def _display(store):
+    from repowise.core.pipeline.phases.generation import _GenerationDisplay
+
+    progress = _Phases()
+    return progress, _GenerationDisplay(progress, store, None)
+
+
+def test_embedding_shows_as_its_own_step_with_a_real_embedder() -> None:
+    progress, display = _display(SimpleNamespace(_embedder=_Embedder()))
+    display.on_embed(2, False)
+    display.on_embed(2, True)
+    display.close_embedding()
+    assert progress.events == [
+        ("start", "embedding", 2),
+        ("item", "embedding"),
+        ("item", "embedding"),
+        ("done", "embedding"),
+    ]
+
+
+def test_a_failed_embed_closes_the_step_without_a_done_row() -> None:
+    progress, display = _display(SimpleNamespace(_embedder=_Embedder()))
+    display.on_embed(3, False)
+    display.close_embedding()
+    assert progress.events[-1] == ("failed", "embedding")
+
+
+def test_the_keyless_embedder_gets_no_embedding_step() -> None:
+    from repowise.core.providers.embedding import KeylessEmbedder
+
+    progress, display = _display(SimpleNamespace(_embedder=KeylessEmbedder()))
+    display.on_embed(2, False)
+    display.on_embed(2, True)
+    display.close_embedding()
+    assert progress.events == []
