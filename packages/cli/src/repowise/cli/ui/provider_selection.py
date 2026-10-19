@@ -16,6 +16,7 @@ from rich.prompt import Prompt
 from rich.table import Table
 
 from repowise.cli.errors import reasoned_error
+from repowise.cli.ui import subscription as subscription_module
 from repowise.cli.ui.brand import BRAND, BRAND_STYLE, OK, VALUE, WARN
 from repowise.cli.ui.env_persistence import _save_key_to_dotenv
 from repowise.cli.ui.model_tier import is_flagship_model
@@ -30,7 +31,6 @@ from repowise.cli.ui.openai_compatible import (
 )
 from repowise.cli.ui.subscription import (
     SubscriptionContext,
-    agent_cli_status,
     ready_agent_providers,
     subscription_estimate,
 )
@@ -203,7 +203,8 @@ def _detect_provider_status(repo_path: Path | None = None) -> dict[str, str]:
 def _agent_cli_setup_lines(name: str) -> list[str]:
     agent = identity_for_provider(name)
     assert agent is not None, name
-    installed, _ = agent_cli_status(name)
+    # Through the module, so one patch of the probe reaches detection and this.
+    installed, _ = subscription_module.agent_cli_status(name)
     problem = (
         f"{agent.display_name} CLI is on PATH but not logged in."
         if installed
