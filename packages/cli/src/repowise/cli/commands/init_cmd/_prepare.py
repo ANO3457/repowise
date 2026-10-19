@@ -64,6 +64,7 @@ def _interactive_gate(
 
 def _start_run(opts: InitOptions, repo_path: Path, start: float) -> InitRun:
     """Prepare ``.repowise/``, logging and the resume mode, then open the run."""
+    dir_created = not (repo_path / ".repowise").exists()
     ensure_repowise_dir(repo_path)
     load_dotenv(repo_path)
 
@@ -97,6 +98,7 @@ def _start_run(opts: InitOptions, repo_path: Path, start: float) -> InitRun:
         start=start,
         is_interactive=is_interactive,
         generate_docs=not opts.index_only,
+        repowise_dir_created=dir_created,
     )
 
 

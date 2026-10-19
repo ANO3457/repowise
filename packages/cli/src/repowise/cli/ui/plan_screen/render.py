@@ -10,7 +10,12 @@ from rich.text import Text
 from repowise.cli.ui.brand import BRAND, WARN, key_value_table
 from repowise.cli.ui.mode_names import BUILT_FROM_CODE, INDEX_ONLY, written_by
 from repowise.cli.ui.mode_selection import LARGE_REPO_FILE_THRESHOLD
-from repowise.cli.ui.plan_screen.state import PlanState, eta_minutes, source_and_languages
+from repowise.cli.ui.plan_screen.state import (
+    PlanState,
+    eta_phrase,
+    eta_seconds,
+    source_and_languages,
+)
 
 #: What ``e`` opens, named so the key is not a blind door.
 EDIT_PREVIEW = (
@@ -50,11 +55,11 @@ def _scan_line(state: PlanState) -> str:
 
 
 def _eta_line(state: PlanState) -> str:
-    low, high = eta_minutes(state)
     what = "to index" if state.run_mode == "fast" else "to index and build the documentation"
     if state.chosen is not None:
         what = "to index and write the documentation"
-    return f"  About {low:,}-{high:,} min {what}."
+    phrase = eta_phrase(*eta_seconds(state))
+    return f"  {phrase[0].upper()}{phrase[1:]} {what}."
 
 
 def _documentation_rows(state: PlanState) -> list[tuple[str, str]]:
@@ -64,7 +69,7 @@ def _documentation_rows(state: PlanState) -> list[tuple[str, str]]:
             ("", "[dim]repowise update --full adds it later[/dim]"),
         ]
     if state.chosen is not None:
-        return [("Documentation", written_by(escape(state.chosen.model)))]
+        return [("Documentation", written_by(escape(state.chosen.model_label)))]
     return [
         ("Documentation", BUILT_FROM_CODE),
         ("", "[dim]a model can write it later: repowise generate[/dim]"),
@@ -105,7 +110,7 @@ def _plan_heading(state: PlanState) -> str:
     chosen = state.chosen
     return (
         f"  [{BRAND}]The plan[/]  [dim]uses {escape(chosen.provider)} / "
-        f"{escape(chosen.model)}: {escape(chosen.cost)}, about {chosen.minutes:,} min more[/dim]"
+        f"{escape(chosen.model_label)}: {escape(chosen.cost)}, about {chosen.minutes:,} min more[/dim]"
     )
 
 
@@ -124,7 +129,7 @@ def _print_model_offer(console: Console, state: PlanState) -> None:
     else:
         _say(
             console,
-            f"{escape(state.offer.found)}: {escape(price.provider)} / {escape(price.model)}",
+            f"{escape(state.offer.found)}: {escape(price.provider)} / {escape(price.model_label)}",
         )
         _say(console, f"[dim]{escape(price.cost)}, about {price.minutes:,} min more[/dim]")
     _say(console, f"[dim]{_model_adds(state)}[/dim]")

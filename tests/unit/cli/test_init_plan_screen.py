@@ -48,7 +48,7 @@ def _state(**kwargs: Any) -> PlanState:
 def test_keyless_plan_is_the_free_run_with_a_visible_model_opt_in() -> None:
     out = _render(_state(agents=("Claude Code",)))
     assert "demo · 50 files scanned · 30 source · 1 language · 400 commits" in out
-    assert "min to index and build the documentation" in out
+    assert "Under a minute to index and build the documentation." in out
     assert "free, runs on this machine" in out
     assert "Built from code" in out
     assert "No key found" in out
@@ -336,3 +336,71 @@ def test_eof_after_a_key_restores_the_run(plan: Any, tmp_path: Path, monkeypatch
     plan.drive(run, MODEL)
     assert run.opts is opts
     assert run.is_interactive is False
+
+
+def test_q_removes_the_repowise_dir_this_run_made(plan: Any, tmp_path: Path) -> None:
+    (tmp_path / ".repowise").mkdir()
+    run = _run(tmp_path)
+    run.repowise_dir_created = True
+    with pytest.raises(click.exceptions.Exit):
+        plan.drive(run, QUIT)
+    assert not (tmp_path / ".repowise").exists()
+
+
+def test_q_keeps_a_repowise_dir_that_was_there_or_holds_a_key(
+    plan: Any, tmp_path: Path
+) -> None:
+    (tmp_path / ".repowise").mkdir()
+    with pytest.raises(click.exceptions.Exit):
+        plan.drive(_run(tmp_path), QUIT)
+    assert (tmp_path / ".repowise").is_dir()
+
+    (tmp_path / ".repowise" / ".env").write_text("GEMINI_API_KEY=x\n")
+    run = _run(tmp_path)
+    run.repowise_dir_created = True
+    with pytest.raises(click.exceptions.Exit):
+        plan.drive(run, QUIT)
+    assert (tmp_path / ".repowise" / ".env").exists()
+
+
+# -- ETA ----------------------------------------------------------------------
+
+
+def _scan(source: int) -> RepoScanInfo:
+    return RepoScanInfo(total_files=source, language_counts={"Python": source})
+
+
+@pytest.mark.parametrize(
+    ("source", "run_mode", "expected"),
+    [
+        # Measured: 16 source files, about 10 s for the whole free run.
+        (16, "standard", "Under a minute to index and build the documentation."),
+        # Measured: 1,186 source files, 1m 41s for a fast index.
+        (1186, "fast", "About 2-4 min to index."),
+    ],
+)
+def test_eta_matches_measured_runs(source: int, run_mode: str, expected: str) -> None:
+    out = _render(PlanState(repo_name="r", scan=_scan(source), run_mode=run_mode))
+    assert expected in out
+
+
+def test_eta_never_reads_zero_minutes() -> None:
+    from repowise.cli.ui.plan_screen.state import eta_phrase
+
+    assert eta_phrase(5, 59) == "under a minute"
+    assert eta_phrase(30, 61) == "about 1-2 min"
+    assert eta_phrase(200, 400) == "about 3-7 min"
+
+
+# -- model id -----------------------------------------------------------------
+
+
+def test_a_subscription_model_is_named_once() -> None:
+    offer = build_offer({"claude_cli": "agent CLI"}, (), _SCAN, onboarding=True, concurrency=10)
+    assert offer.price is not None
+    out = _render(_state(offer=offer))
+    assert "claude_cli / claude_cli/" not in out
+    assert f"claude_cli / {offer.price.model_label}" in out
+    chosen = _render(_state(offer=offer, chosen=offer.price))
+    assert f"Written by {offer.price.model_label}" in chosen
+    assert "claude_cli/" not in chosen

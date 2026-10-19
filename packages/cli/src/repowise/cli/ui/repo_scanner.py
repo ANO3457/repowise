@@ -162,24 +162,30 @@ def estimated_documentable_files(scan: RepoScanInfo | None) -> int:
     return max(0, src - scan.test_file_count)
 
 
-def estimated_wiki_render_minutes(documentable: int) -> tuple[int, int]:
-    """Rough low/high minutes to render and embed *documentable* file pages.
+def estimated_wiki_render_seconds(documentable: int) -> tuple[float, float]:
+    """Rough low/high seconds to render and embed *documentable* file pages.
 
-    Calibrated at roughly 1-2 minutes per thousand pages. Shared by the pre-scan
-    summary and the page-volume question so the two screens cannot quote
-    different numbers for the same work.
+    Calibrated at roughly 1-2 minutes per thousand pages.
     """
-    return max(1, round(documentable / 1000)), max(2, round(2 * documentable / 1000))
+    return documentable * 0.06, documentable * 0.12
 
 
-def estimated_index_minutes(scan: RepoScanInfo) -> tuple[int, int]:
-    """Rough low/high minutes to parse, graph and walk git for *scan*.
+def estimated_wiki_render_minutes(documentable: int) -> tuple[int, int]:
+    """The same estimate in whole minutes, for the page-volume question."""
+    low, high = estimated_wiki_render_seconds(documentable)
+    return max(1, round(low / 60)), max(2, round(high / 60))
 
-    Calibrated against ~700-file Python+TS repos: traverse, parse and graph
-    come in around 2 min per thousand source files. A range, not a point.
+
+def estimated_index_seconds(scan: RepoScanInfo) -> tuple[float, float]:
+    """Rough low/high seconds to parse, graph and walk git for *scan*.
+
+    Calibrated on measured runs: a 16-source-file repo indexes in about 6 s,
+    a 1,186-source-file one in about 100 s. Coarse on purpose; the high end
+    doubles the low one.
     """
     src_files = sum(source_file_counts(scan).values()) or scan.total_files
-    return max(1, round(src_files / 500)), max(2, round(src_files / 250))
+    low = 5 + 0.08 * src_files
+    return low, 2 * low
 
 
 def estimated_model_minutes(model_calls: int) -> int:

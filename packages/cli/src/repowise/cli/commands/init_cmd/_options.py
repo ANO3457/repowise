@@ -69,6 +69,8 @@ class InitRun:
     repo_path: Path
     start: float
     is_interactive: bool = False
+    #: This run made ``.repowise/``, so quitting before indexing removes it again.
+    repowise_dir_created: bool = False
     # Whether a model writes the documentation (the plan screen's answer).
     generate_docs: bool = True
     # Advanced-mode answers, None until chosen. Each loses to its flag and

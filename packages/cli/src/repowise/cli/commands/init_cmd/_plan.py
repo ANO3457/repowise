@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 from dataclasses import dataclass, replace
 from typing import Any
 
@@ -199,6 +200,15 @@ def _apply(run: InitRun, base: PlanState, answers: _Answers) -> None:
         run.global_mcp_consent = not answers.this_repo_only
 
 
+def _leave_repo_as_it_was(run: InitRun) -> None:
+    """Remove the ``.repowise/`` this run made, when nothing has been put in it."""
+    if not run.repowise_dir_created:
+        return
+    # Not empty means the picker saved a key there, and that stays.
+    with contextlib.suppress(OSError):
+        (run.repo_path / ".repowise").rmdir()
+
+
 def run_plan_screen(run: InitRun, scan: Any) -> None:
     """Show the plan, act on keys until Enter, then fold the answers into *run*.
 
@@ -219,6 +229,7 @@ def run_plan_screen(run: InitRun, scan: Any) -> None:
             render_plan(console, state)
             action = read_plan_key(console, state)
             if action == QUIT:
+                _leave_repo_as_it_was(run)
                 console.print("  [dim]Nothing indexed.[/dim]")
                 raise click.exceptions.Exit(0)
             if action == MODEL:

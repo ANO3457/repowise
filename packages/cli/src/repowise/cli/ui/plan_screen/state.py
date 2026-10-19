@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 
 from repowise.cli.ui.repo_scanner import (
     RepoScanInfo,
     estimated_documentable_files,
-    estimated_index_minutes,
+    estimated_index_seconds,
     estimated_model_minutes,
-    estimated_wiki_render_minutes,
+    estimated_wiki_render_seconds,
     source_file_counts,
 )
 
@@ -23,6 +24,11 @@ class ModelPrice:
     #: ``about $0.04-$0.07, about 14 model calls``, or a subscription's quota line.
     cost: str
     minutes: int
+
+    @property
+    def model_label(self) -> str:
+        """The model id without a repeated ``<provider>/`` prefix."""
+        return self.model.removeprefix(f"{self.provider}/")
 
 
 @dataclass(frozen=True)
@@ -144,16 +150,25 @@ def build_offer(
     )
 
 
-def eta_minutes(state: PlanState) -> tuple[int, int]:
-    """Low and high minutes for the run as planned."""
-    low, high = estimated_index_minutes(state.scan)
+def eta_seconds(state: PlanState) -> tuple[float, float]:
+    """Low and high seconds for the run as planned."""
+    low, high = estimated_index_seconds(state.scan)
     if state.run_mode == "fast":
         return low, high
-    r_low, r_high = estimated_wiki_render_minutes(estimated_documentable_files(state.scan))
+    r_low, r_high = estimated_wiki_render_seconds(estimated_documentable_files(state.scan))
     low, high = low + r_low, high + r_high
     if state.chosen is not None:
-        low, high = low + state.chosen.minutes, high + state.chosen.minutes
+        low, high = low + state.chosen.minutes * 60, high + state.chosen.minutes * 60
     return low, high
+
+
+def eta_phrase(low: float, high: float) -> str:
+    """``under a minute``, ``about 1-2 min`` or ``about 3-6 min``."""
+    if high < 60:
+        return "under a minute"
+    lo = max(1, round(low / 60))
+    hi = max(lo + 1, math.ceil(high / 60))
+    return f"about {lo:,}-{hi:,} min"
 
 
 def source_and_languages(scan: RepoScanInfo) -> tuple[int, int]:
