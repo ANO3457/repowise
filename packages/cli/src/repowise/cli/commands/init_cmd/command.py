@@ -22,6 +22,7 @@ from repowise.core.analysis.health.coverage import PARSERS as COVERAGE_PARSERS
 from repowise.core.generation.languages import SUPPORTED_LANGUAGES
 from repowise.core.generation.styles import list_styles, resolve_style
 from repowise.core.reasoning import REASONING_MODES
+from repowise.core.update_lock import init_in_progress
 
 from ._finish import (
     catch_up_savings,
@@ -485,6 +486,11 @@ def init_command(**params: Any) -> None:
     if len(scan.repos) == 1 and scan.repos[0].path != repo_path:
         repo_path = scan.repos[0].path
 
+    with init_in_progress(repo_path):
+        _run_single_repo(opts, repo_path, start)
+
+
+def _run_single_repo(opts: InitOptions, repo_path: Any, start: float) -> None:
     run = _prepare_single_repo(opts, repo_path, start)
     if run is None or not index_repository(run):
         return
