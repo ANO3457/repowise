@@ -65,6 +65,7 @@ from repowise.cli.ui import (
     load_dotenv,
     print_banner,
 )
+from repowise.core.decision_lanes import record_decision_lanes
 from repowise.core.docs_mode import docs_mode_state_fields
 from repowise.core.generation.styles import DEFAULT_STYLE
 
@@ -616,6 +617,7 @@ def _stamp_repo_scope(
     scope_embedder = _scope_embedder(ctx, docs)
     state["run_mode"] = ctx.run_mode
     state["git_tier"] = "essential" if ctx.run_mode == "fast" else "full"
+    record_decision_lanes(state, repo_path, ran_with_model=repo_provider is not None)
     unavailable = [] if getattr(result, "health_report", None) is not None else ["health"]
     stamp_index_scope(
         state,

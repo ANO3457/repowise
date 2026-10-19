@@ -28,10 +28,12 @@ import contextlib
 import sys
 import time
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import click
 
+from repowise.cli.commands.decision_lanes import print_lane_estimate, run_and_report_lanes
 from repowise.cli.helpers import (
     console,
     get_head_commit,
@@ -45,6 +47,7 @@ from repowise.cli.helpers import (
     stamp_offered_slots,
 )
 from repowise.core.analysis.health import HEALTH_ANALYZER_VERSION
+from repowise.core.decision_lanes import plan_decision_lanes, set_pending_decision_lanes
 from repowise.core.docs_mode import docs_mode_state_fields
 from repowise.core.index_scope import file_page_scope, stamp_index_scope
 from repowise.core.ingestion.git_indexer import GIT_HISTORY_VERSION, GIT_HISTORY_VERSION_KEY
@@ -60,6 +63,7 @@ def _gate_cost(
     repo_path: Path,
     *,
     yes: bool,
+    decisions: Any = None,
 ) -> None:
     """Print the estimated spend and confirm past the gate. Raises on decline.
 
@@ -77,7 +81,10 @@ def _gate_cost(
         from repowise.core.cost_estimator import build_generation_plan, estimate_cost
 
         plans = build_generation_plan(parsed_files, graph_builder, config)
-        est = estimate_cost(plans, provider.provider_name, provider.model_name, repo_path=repo_path)
+        priced = [*plans, decisions.cost_plan()] if decisions else plans
+        est = estimate_cost(
+            priced, provider.provider_name, provider.model_name, repo_path=repo_path
+        )
     except Exception as exc:
         console.print(f"[yellow]Cost estimate unavailable ({exc}); continuing.[/yellow]")
         return
@@ -87,6 +94,8 @@ def _gate_cost(
     structural = structural_page_summary(plans)
     if structural:
         console.print(f"  [dim]{structural}[/dim]")
+    if decisions:
+        print_lane_estimate(decisions, provider)
 
     # Nothing to ask on a run that cannot be asked. Without this the confirm
     # reads EOF, raises, and the caller reports a successful run that generated
@@ -294,9 +303,20 @@ async def _run_upgrade(
         "(graph reused from index — not re-resolved)."
     )
 
+    # The decision lanes a keyless index skipped run with this model as well.
+    lane_inputs = SimpleNamespace(
+        graph_builder=graph_builder,
+        git_meta_map=git_meta_map,
+        parsed_files=parsed_files,
+        source_map=source_map,
+    )
+    lane_plan = plan_decision_lanes(load_state(repo_path), repo_path, lane_inputs)
+
     # Show the bill before running it, as init does: the user reaching for
     # `--full` has never been shown a cost for this repo.
-    _gate_cost(parsed_files, graph_builder, config, provider, repo_path, yes=yes)
+    _gate_cost(
+        parsed_files, graph_builder, config, provider, repo_path, yes=yes, decisions=lane_plan
+    )
 
     # 5. Generate the docs the fast index skipped, embedding as we go.
     cost_tracker = _upgrade_cost_tracker(sf, repo_id)
@@ -319,6 +339,17 @@ async def _run_upgrade(
 
     # Flush buffered cost rows now generation is done (best-effort).
     await cost_tracker.flush()
+
+    lanes = await run_and_report_lanes(
+        sf,
+        repo_id,
+        repo_path,
+        lane_plan,
+        provider=provider,
+        inputs=lane_inputs,
+        vector_store=vector_store,
+        cost_tracker=cost_tracker,
+    )
 
     # 6. Persist pages + a GenerationJob marker, then build the FTS index.
     retired_page_ids = await _persist_upgrade_pages(
@@ -374,6 +405,7 @@ async def _run_upgrade(
             "embedding_error": embedding_error,
             "stub_fallbacks": stub_fallbacks,
             "stub_reasons": stub_reasons,
+            "decision_lanes_pending": lanes.still_pending if lanes else None,
         },
     )
 
@@ -968,6 +1000,8 @@ def _finish_upgrade_state(
     # Every onboarding slot was evaluated against whole-repo signals, so the
     # missing-slot notice has nothing left to report.
     stamp_offered_slots(state, enabled=config.enable_onboarding)
+    if outcome.get("decision_lanes_pending") is not None:
+        set_pending_decision_lanes(state, outcome["decision_lanes_pending"])
     # Health and the git backfill ran over the whole repo under the current
     # analyzer and history rules, so the next update need not redo them.
     state["health_analyzer_version"] = HEALTH_ANALYZER_VERSION

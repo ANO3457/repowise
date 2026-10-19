@@ -382,8 +382,13 @@ async def _run_decision_extraction(
     parsed_files: list[Any],
     source_map: dict[str, bytes] | None = None,
     progress: ProgressCallback | None,
+    only_sources: Container[str] | None = None,
 ) -> Any | None:
-    """Extract architectural decisions from source and git history."""
+    """Extract architectural decisions from source and git history.
+
+    *only_sources* runs just those index sources and skips the session passes:
+    the later run that fills in the lanes a keyless index could not.
+    """
     try:
         from repowise.core.analysis.decision_extractor import DecisionExtractor
         from repowise.core.analysis.decisions.policy import resolve_policy
@@ -395,6 +400,8 @@ async def _run_decision_extraction(
         repo_cfg = load_repo_config(repo_path)
         policy = resolve_policy(repo_cfg).policy
         enabled = policy.enabled_index_sources()
+        if only_sources is not None:
+            enabled = tuple(key for key in enabled if key in only_sources)
         if progress:
             progress.on_phase_start("decisions", len(enabled))
 
@@ -421,6 +428,10 @@ async def _run_decision_extraction(
             extractor.extract_all(on_step=_decision_step, enabled_sources=enabled),
             timeout=DECISION_EXTRACTION_TIMEOUT_SECS,
         )
+
+        if only_sources is not None:
+            _phase_done(progress, "decisions")
+            return report
 
         await _add_session_decisions(
             repo_path,

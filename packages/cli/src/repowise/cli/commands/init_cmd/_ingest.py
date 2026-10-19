@@ -106,15 +106,20 @@ async def _index_with_resume(
             await engine.dispose()
 
 
+def decision_llm_client(run: InitRun) -> Any:
+    """The model decision extraction calls this run, or None (always None on a dry run)."""
+    if run.opts.dry_run:
+        return None
+    return run.provider if not run.opts.index_only else run.decision_provider
+
+
 def index_repository(run: InitRun) -> bool:
     """Phases 1 and 2, without docs (generation follows the cost gate). False if interrupted."""
     opts = run.opts
     # Fast mode skips generation, so it has three phases.
     run.total_phases = 3 if opts.run_mode == "fast" else 4
     # None on a dry run: analysis would call it before generation's dry-run exit.
-    llm_client = None
-    if not opts.dry_run:
-        llm_client = run.provider if not opts.index_only else run.decision_provider
+    llm_client = decision_llm_client(run)
 
     from repowise.core.pipeline import PhaseTimingRecorder, run_pipeline
     from repowise.core.pipeline.modes import OrchestratorMode

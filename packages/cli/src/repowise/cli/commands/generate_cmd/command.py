@@ -34,6 +34,7 @@ from repowise.cli.helpers import (
 from repowise.cli.providers import resolve_embedder
 from repowise.cli.ui import load_dotenv
 from repowise.core.cost_estimator import STRUCTURAL_PAGE_TYPES
+from repowise.core.decision_lanes import set_pending_decision_lanes
 from repowise.core.docs_mode import docs_mode_state_fields, resolve_docs_mode
 from repowise.core.generation.page_selection import PageSelectionIntent
 
@@ -110,17 +111,34 @@ def _make_gate(dry_run: bool):
     """
 
     def gate_cost(
-        cost_plans: Any, provider: Any, repo_path: Path, *, yes: bool, dry_run: bool
+        cost_plans: Any,
+        provider: Any,
+        repo_path: Path,
+        *,
+        yes: bool,
+        dry_run: bool,
+        decisions: Any = None,
     ) -> bool:
         from repowise.cli.commands.init_cmd.generation import cost_gate_blocks, format_cost
         from repowise.core.cost_estimator import estimate_cost
 
+        from ..decision_lanes import print_lane_estimate
+
+        pages = sum(p.count for p in cost_plans)
+        # The gate prices pages and decision calls together; each gets its own line.
+        all_plans = [*cost_plans, decisions.cost_plan()] if decisions else list(cost_plans)
+
         if provider is None:
-            est = estimate_cost(cost_plans, "none", "", repo_path=repo_path)
-            tokens = est.estimated_input_tokens + est.estimated_output_tokens
+            if pages:
+                est = estimate_cost(cost_plans, "none", "", repo_path=repo_path)
+                tokens = est.estimated_input_tokens + est.estimated_output_tokens
+                console.print(
+                    f"Writing [bold]{pages}[/bold] pages, about [bold]{tokens:,}[/bold] tokens."
+                )
+            if decisions:
+                print_lane_estimate(decisions, None)
             console.print(
-                f"Writing [bold]{est.total_pages}[/bold] pages, about [bold]{tokens:,}[/bold] "
-                "tokens. No model is configured, so there is no price; pass "
+                "No model is configured, so there is no price; pass "
                 "[cyan]--provider[/cyan] to price it."
             )
             console.print("[dim]Dry run, nothing generated.[/dim]")
@@ -129,17 +147,19 @@ def _make_gate(dry_run: bool):
         est = None
         try:
             est = estimate_cost(
-                cost_plans, provider.provider_name, provider.model_name, repo_path=repo_path
+                all_plans, provider.provider_name, provider.model_name, repo_path=repo_path
             )
         except Exception as exc:
             console.print(f"[yellow]Cost estimate unavailable ({exc}).[/yellow]")
 
         if est is not None:
-            pages = sum(p.count for p in cost_plans)
-            console.print(
-                f"Writing [bold]{pages}[/bold] pages with "
-                f"[cyan]{provider.model_name}[/cyan]. Estimated [bold]{format_cost(est)}[/bold]."
-            )
+            if pages:
+                console.print(
+                    f"Writing [bold]{pages}[/bold] pages with [cyan]{provider.model_name}[/cyan]."
+                )
+            if decisions:
+                print_lane_estimate(decisions, provider)
+            console.print(f"Estimated [bold]{format_cost(est)}[/bold].")
 
         if dry_run:
             console.print("[dim]Dry run, nothing generated.[/dim]")
@@ -371,6 +391,10 @@ def _account_for_plan(
 def _report_outcome(outcome: Any, elapsed: float) -> None:
     """Print where every planned page went, the actual cost, and what is left."""
     planned = outcome.plan.generate_ids
+    if not planned:
+        # A decisions-only run: the lane lines already said what it found.
+        console.print(f"Cost: [bold]${outcome.cost_usd:.3f}[/bold] ({outcome.tokens:,} tokens).")
+        return
     c = _account_for_plan(planned, outcome.generated_pages, outcome.swept_page_ids)
     done = c["written"] + c["unchanged"]
     unchanged = f" ({c['unchanged']} unchanged, no model call)" if c["unchanged"] else ""
@@ -489,4 +513,7 @@ def _write_state(
         provider=provider_block,
         upgrade={"status": "not_applicable", "retryable": False, "next_stage": None},
     )
+    lanes = getattr(outcome, "decision_lanes", None)
+    if lanes is not None:
+        set_pending_decision_lanes(state, lanes.still_pending)
     save_state(repo_path, state)
