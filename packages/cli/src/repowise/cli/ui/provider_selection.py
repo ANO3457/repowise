@@ -178,6 +178,8 @@ def _detect_provider_status(repo_path: Path | None = None) -> dict[str, str]:
     base_url = (repo_getenv(repo_path)("OPENAI_BASE_URL") or "").rstrip("/")
     keyed = credentialed_providers(repo_path)
     for prov in keyed:
+        # An Ollama named by OLLAMA_BASE_URL but not answering is shown as not
+        # ready, the honest state, even though --yes would still try it.
         if prov not in _PICKER_SPECS or (prov == "ollama" and not ollama_up):
             continue
         if prov == "openai" and base_url not in ("", _OPENAI_DEFAULT_BASE_URL):

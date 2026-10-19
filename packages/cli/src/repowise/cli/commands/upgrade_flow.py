@@ -84,7 +84,7 @@ def _gate_cost(
         return
 
     pages = sum(p.count for p in plans)
-    console.print(f"[bold]{pages}[/bold] pages. {spend_phrase(est)}.")
+    console.print(f"[bold]{pages}[/bold] pages. {spend_phrase(est, config.max_concurrency)}.")
     structural = structural_page_summary(plans)
     if structural:
         console.print(f"  [dim]{structural}[/dim]")
