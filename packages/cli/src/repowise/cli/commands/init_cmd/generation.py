@@ -17,6 +17,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
+import structlog
 from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 
 # The cost-gate helpers moved to ``repowise.cli.cost_gate`` so ``init`` and
@@ -50,6 +51,8 @@ from repowise.core.generation.models import (
     count_stub_fallbacks,
     is_stub_fallback,
 )
+
+logger = structlog.get_logger(__name__)
 
 __all__ = [
     "COST_GATE_USD",
@@ -245,7 +248,12 @@ def _enrich_knowledge_graph(
                 f"{len(enriched.layers)} layers, {len(enriched.tour)} tour steps"
             )
         except Exception as exc:
-            console.print(f"  [{WARN}]KG enrichment skipped: {exc}[/]")
+            # Optional enrichment: the reason goes to the log (shown with -v).
+            logger.warning("kg_enrichment_skipped", error=f"{type(exc).__name__}: {exc}")
+            console.print(
+                "  [dim]Knowledge graph layers and tour were skipped; "
+                "run with -v to see why.[/dim]"
+            )
 
 
 def run_repo_generation(

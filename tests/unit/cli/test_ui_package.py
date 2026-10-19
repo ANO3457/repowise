@@ -41,7 +41,6 @@ def test_facade_reexports_public_surface() -> None:
         "print_analysis_summary",
         "build_completion_panel",
         "build_contextual_next_steps",
-        "build_status_notes",
         "format_bytes",
         "format_elapsed",
         "LARGE_REPO_FILE_THRESHOLD",
