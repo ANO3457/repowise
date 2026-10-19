@@ -341,7 +341,6 @@ def keep_prior_documentation(
     this run's: fast re-indexed git at the essential tier.
     """
     from repowise.core.docs_mode import resolve_docs_mode
-    from repowise.core.index_scope import resolve_index_scope
 
     prior_mode = resolve_docs_mode(prior_state)
     if run_mode != "fast" or prior_mode == "none":
@@ -351,8 +350,14 @@ def keep_prior_documentation(
     for key in ("provider", "model"):
         if prior_state.get(key):
             state[key] = prior_state[key]
+    _restore_docs_scope(state["index_scope"], prior_state, prior_mode)
+
+
+def _restore_docs_scope(scope: dict[str, Any], prior_state: dict[str, Any], prior_mode: str) -> None:
+    """Put the prior run's documentation sections back into this run's *scope*."""
+    from repowise.core.index_scope import resolve_index_scope
+
     prior_scope = resolve_index_scope(prior_state)
-    scope = state["index_scope"]
     for key in _DOCS_SCOPE_KEYS:
         scope[key] = prior_scope[key]
     if scope["content_provenance"] in ("none", "unknown"):

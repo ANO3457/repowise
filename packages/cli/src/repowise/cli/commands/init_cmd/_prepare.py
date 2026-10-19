@@ -154,6 +154,15 @@ def _resolve_settings(run: InitRun) -> None:
     run.embedder_was_requested = _embedder_was_requested(opts.embedder_name, config.get("embedder"))
 
 
+def _announce_kept_documentation(run: InitRun) -> None:
+    """Fast mode writes no pages, so documentation already here stays."""
+    if run.prior_docs_mode != "none":
+        console.print(
+            "[dim]Keeping the documentation this repo already has. "
+            "Fast mode rebuilds the index and leaves the pages as they are.[/dim]"
+        )
+
+
 def _confirm_wiki_overwrite(run: InitRun) -> bool:
     """Read the prior state; False when the user keeps a model-written wiki.
 
@@ -171,12 +180,7 @@ def _confirm_wiki_overwrite(run: InitRun) -> bool:
     run.prior_docs_mode = resolve_docs_mode(prior_state)
     opts = run.opts
     if opts.run_mode == "fast":
-        # Fast mode writes no pages, so there is nothing to overwrite.
-        if run.prior_docs_mode != "none":
-            console.print(
-                "[dim]Keeping the documentation this repo already has. "
-                "Fast mode rebuilds the index and leaves the pages as they are.[/dim]"
-            )
+        _announce_kept_documentation(run)
         return True
     if not opts.index_only or run.prior_docs_mode != "llm" or opts.force or opts.yes:
         return True
