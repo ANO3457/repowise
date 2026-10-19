@@ -18,7 +18,7 @@ def build_status_notes(setup) -> list[str]:
     """The Connected lines as plain text."""
     from rich.console import Console
 
-    console = Console(width=200, record=True)
+    console = Console(width=200, record=True, theme=THEME)
     for line in connected_lines(setup):
         console.print(line)
     return [line for line in console.export_text().splitlines() if line.strip()]
