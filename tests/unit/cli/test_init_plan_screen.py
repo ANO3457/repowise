@@ -426,3 +426,46 @@ def test_back_from_the_gateway_keeps_the_picker_context(monkeypatch: Any) -> Non
 
     assert selection is None
     assert seen == [context, context]
+
+
+# -- end of input inside the questions behind e and m -------------------------
+
+
+def _raise(exc: type[BaseException]):
+    def read(_prompt: str) -> str:
+        raise exc
+
+    return read
+
+
+def test_eof_inside_edit_falls_back_like_the_key_read(
+    plan: Any, tmp_path: Path, monkeypatch: Any
+) -> None:
+    monkeypatch.setattr(click.termui, "visible_prompt_func", _raise(EOFError))
+    run = _run(tmp_path)
+    opts = run.opts
+    plan.drive(run, EDIT)
+    assert run.is_interactive is False
+    assert run.opts is opts
+
+
+def test_eof_at_the_key_prompt_behind_m_falls_back_too(
+    plan: Any, tmp_path: Path, monkeypatch: Any
+) -> None:
+    monkeypatch.setattr(click.termui, "hidden_prompt_func", _raise(EOFError))
+    monkeypatch.setattr(provider_selection.Prompt, "ask", lambda *a, **k: "1")
+    run = _run(tmp_path)
+    plan.drive(run, MODEL)
+    assert run.is_interactive is False
+
+
+def test_ctrl_c_inside_edit_still_aborts(plan: Any, tmp_path: Path, monkeypatch: Any) -> None:
+    monkeypatch.setattr(click.termui, "visible_prompt_func", _raise(KeyboardInterrupt))
+    with pytest.raises(click.Abort):
+        plan.drive(_run(tmp_path), EDIT)
+
+
+def test_click_prompts_are_restored_after_the_screen(plan: Any, tmp_path: Path) -> None:
+    before = (click.termui.visible_prompt_func, click.termui.hidden_prompt_func)
+    plan.drive(_run(tmp_path), START)
+    assert (click.termui.visible_prompt_func, click.termui.hidden_prompt_func) == before

@@ -25,6 +25,7 @@ from repowise.cli.ui.plan_screen import (
     PlanState,
     RunShape,
     build_offer,
+    end_of_input_is_eof,
     model_calls_for,
     price_model,
     read_plan_key,
@@ -203,6 +204,29 @@ def _leave_repo_as_it_was(run: InitRun) -> None:
         (run.repo_path / ".repowise").rmdir()
 
 
+def _until_enter(
+    run: InitRun, scan: Any, prefer: tuple[str, ...], base: PlanState, answers: _Answers
+) -> None:
+    """Render, read a key, act on it; return on Enter."""
+    while True:
+        state = _state(run, base, answers)
+        console.print()
+        render_plan(console, state)
+        action = read_plan_key(console, state)
+        if action == QUIT:
+            _leave_repo_as_it_was(run)
+            console.print("  [dim]Nothing indexed.[/dim]")
+            raise click.exceptions.Exit(0)
+        if action == MODEL:
+            _pick_model(run, scan, prefer, answers)
+        elif action == EDIT:
+            _edit_plan(run, scan, base.editor_setup, answers)
+        elif action == THIS_REPO:
+            answers.this_repo_only = not answers.this_repo_only
+        else:
+            return
+
+
 def run_plan_screen(run: InitRun, scan: Any) -> None:
     """Show the plan, act on keys until Enter, then fold the answers into *run*.
 
@@ -217,23 +241,9 @@ def run_plan_screen(run: InitRun, scan: Any) -> None:
     # Restored on EOF, so the defaults path never runs half an answer.
     before = (run.opts, run.generate_docs, run.editor_options)
     try:
-        while True:
-            state = _state(run, base, answers)
-            console.print()
-            render_plan(console, state)
-            action = read_plan_key(console, state)
-            if action == QUIT:
-                _leave_repo_as_it_was(run)
-                console.print("  [dim]Nothing indexed.[/dim]")
-                raise click.exceptions.Exit(0)
-            if action == MODEL:
-                _pick_model(run, scan, prefer, answers)
-            elif action == EDIT:
-                _edit_plan(run, scan, base.editor_setup, answers)
-            elif action == THIS_REPO:
-                answers.this_repo_only = not answers.this_repo_only
-            else:
-                break
+        # The questions behind m and e end the same way as the key read.
+        with end_of_input_is_eof():
+            _until_enter(run, scan, prefer, base, answers)
     except EOFError:
         run.opts, run.generate_docs, run.editor_options = before
         run.is_interactive = False

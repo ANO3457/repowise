@@ -4,7 +4,15 @@
 answer. The command layer owns what each key changes.
 """
 
-from repowise.cli.ui.plan_screen.keys import EDIT, MODEL, QUIT, START, THIS_REPO, read_plan_key
+from repowise.cli.ui.plan_screen.keys import (
+    EDIT,
+    MODEL,
+    QUIT,
+    START,
+    THIS_REPO,
+    end_of_input_is_eof,
+    read_plan_key,
+)
 from repowise.cli.ui.plan_screen.render import render_plan
 from repowise.cli.ui.plan_screen.state import (
     ModelOffer,
@@ -27,6 +35,7 @@ __all__ = [
     "PlanState",
     "RunShape",
     "build_offer",
+    "end_of_input_is_eof",
     "model_calls_for",
     "price_model",
     "read_plan_key",

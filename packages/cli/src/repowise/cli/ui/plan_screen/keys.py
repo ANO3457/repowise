@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 
+import click.termui
 from rich.console import Console
 from rich.prompt import Prompt
 
@@ -12,6 +14,39 @@ from repowise.cli.ui.plan_screen.state import PlanState
 START, MODEL, EDIT, THIS_REPO, QUIT = "start", "model", "edit", "this_repo", "quit"
 
 _KEYS = {"": START, "m": MODEL, "e": EDIT, "s": THIS_REPO, "q": QUIT}
+
+
+class _InputEndedError(Exception):
+    """End of input inside a click prompt; click lets anything but EOF and ^C through."""
+
+
+@contextmanager
+def end_of_input_is_eof() -> Iterator[None]:
+    """Inside, end of input in a click prompt raises EOFError, the way Rich's does.
+
+    Click turns EOF into Abort, the same exception as Ctrl-C, so the
+    questions behind ``m`` and ``e`` would end the run where the key read
+    falls back to defaults. Ctrl-C is untouched and still aborts.
+    """
+    saved = click.termui.visible_prompt_func, click.termui.hidden_prompt_func
+
+    def ending(read: Callable[[str], str]) -> Callable[[str], str]:
+        def guarded(prompt: str) -> str:
+            try:
+                return read(prompt)
+            except EOFError:
+                raise _InputEndedError from None
+
+        return guarded
+
+    click.termui.visible_prompt_func = ending(saved[0])
+    click.termui.hidden_prompt_func = ending(saved[1])
+    try:
+        yield
+    except _InputEndedError:
+        raise EOFError from None
+    finally:
+        click.termui.visible_prompt_func, click.termui.hidden_prompt_func = saved
 
 
 def read_plan_key(
