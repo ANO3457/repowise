@@ -70,6 +70,7 @@ from repowise.cli.ui import (
     load_dotenv,
     print_banner,
 )
+from repowise.cli.ui.mode_names import pages
 from repowise.core.decision_lanes import record_decision_lanes
 from repowise.core.docs_mode import docs_mode_state_fields
 from repowise.core.generation.styles import DEFAULT_STYLE
@@ -166,8 +167,8 @@ def _run_workspace_generation(
     ):
         console.print(
             f"    [{WARN}]Skipped.[/] "
-            "[dim]Index will be saved without docs; "
-            "future `repowise update` runs default to index-only.[/dim]"
+            "[dim]Documentation will be built from code; "
+            "future `repowise update` runs stay built from code.[/dim]"
         )
         # Sentinel: caller treats this exactly like an index-only run so the
         # persisted docs mode is not "llm" and the post-commit hook doesn't
@@ -470,7 +471,7 @@ def _generate_repo_docs(repo: Any, ctx: _WorkspaceCtx, index: _RepoIndex) -> _Re
     docs = _RepoDocs()
     if ctx.dry_run:
         console.print(
-            f"    [{WARN}]Dry run — `.repowise/` created; "
+            f"    [{WARN}]Dry run: `.repowise/` created; "
             "no DB, state, or pages written for this repo.[/]\n"
         )
         docs.skip_reason = "dry run"
@@ -518,14 +519,14 @@ def _generate_repo_with_model(
 
         docs.pages_generated = len(generated_pages) - count_stub_fallbacks(generated_pages)
         docs.docs_mode = "llm"
-        console.print(f"    [{OK}]✓[/] Generated {docs.pages_generated} pages\n")
+        console.print(f"    [{OK}]✓[/] Wrote {pages(docs.pages_generated)} with the model\n")
     except CostGateDeclined:
         # Declining only meant "not at that price": fall back to the free
         # template renderer rather than leave the repo with no wiki.
         if not sys.stdin.isatty():
             ctx.gaps.append(f"{repo.alias}: {COST_UNCONFIRMED_BUILT}")
         console.print(
-            "    [dim]Building this repo's wiki from structure instead. Run "
+            "    [dim]Building this repo's documentation from code instead. Run "
             f"[bold]{fast_to_full_command(repo.alias)}[/bold] to write it with a model "
             "later.[/dim]"
         )
@@ -557,7 +558,7 @@ def _render_repo_from_templates(
     docs.pages_generated = len(generated_pages)
     docs.docs_mode = "deterministic"
     console.print(
-        f"    [{OK}]✓[/] Rendered {len(generated_pages)} pages from structure (no model)\n"
+        f"    [{OK}]✓[/] Built {pages(len(generated_pages))} from code (no model)\n"
     )
 
 
@@ -1080,7 +1081,7 @@ def _resolve_workspace_provider(
             if answers.provider_name is not None:
                 raise
             console.print(
-                f"  [{WARN}]Provider setup failed ({exc}); falling back to index-only.[/]"
+                f"  [{WARN}]Provider setup failed ({exc}); building documentation from code.[/]"
             )
             answers.index_only = True
             provider = None
@@ -1108,7 +1109,7 @@ def _workspace_config(selected: list[Any], root: Path, primary_alias: str, *, dr
         # `.repowise/` is still created per repo, so a later distill-hook
         # decline can gate every selected path; nothing is written into it.
         console.print(
-            f"  [{WARN}]Dry run — `.repowise/` directories are created, "
+            f"  [{WARN}]Dry run: `.repowise/` directories are created, "
             "but no config, index, or pages are written.[/]"
         )
     else:
