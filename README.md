@@ -105,14 +105,15 @@ index, and asks you before anything costs money. Prefer to do it yourself:
 ```bash
 uv tool install repowise          # or: pipx install repowise / pip install repowise
 cd /path/to/your/repo
-repowise init --yes --no-prose    # graph, git, health, dead code, docs. No key, no spend.
-repowise serve                    # local dashboard + MCP server
+repowise init --yes --no-prose    # graph, git, health, dead code, documentation. No key, no spend.
+repowise serve                    # dashboard + MCP server (needs Node 20+; first run downloads the UI)
 ```
 
-`init` wires Claude Code automatically. Then ask your agent *"Use Repowise
-`get_overview` to summarize this repository"* or *"What breaks if I change
-`src/auth.py`?"*
-[Full setup, every agent, optional model-written docs →](docs/start/QUICKSTART.md)
+`init` wires Claude Code for this repo and points the global repowise MCP entry
+here (an interactive run asks first). Restart Claude Code or run `/mcp`, then ask
+*"Use Repowise `get_overview` to summarize this repository"* or *"What breaks if I
+change `src/auth.py`?"*
+[Full setup, every agent, documentation written by a model →](docs/start/QUICKSTART.md)
 
 ---
 
@@ -457,8 +458,8 @@ Guides: **[code health](docs/layers/CODE_HEALTH.md)** ·
 
 ## See all of it
 
-`repowise serve` starts the full web dashboard next to the MCP server. No separate
-setup, all local.
+`repowise serve` starts the full web dashboard next to the MCP server, all local. It
+needs Node.js 20+, and the first run downloads the UI.
 
 <table>
 <tr>
