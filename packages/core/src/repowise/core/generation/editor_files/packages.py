@@ -21,6 +21,7 @@ directories too small to orient by, and both count in the omitted total.
 from __future__ import annotations
 
 import json
+import re
 from collections import defaultdict
 from collections.abc import Iterable
 from pathlib import Path
@@ -46,6 +47,7 @@ _ROLE_CHARS = 100
 _MINOR_SHARE = 0.02
 
 CODE_LANGUAGES = REGISTRY.code_languages()
+_PLACEHOLDER = re.compile(r"%[\w.-]+%")
 
 
 def build_package_rows(
@@ -215,7 +217,8 @@ def _role(
         return ""
     for manifest in manifests:
         text = manifest_description(repo_root / manifest)
-        if text:
+        # A localisation key (``%extension.description%``) is not a description.
+        if text and not _PLACEHOLDER.fullmatch(text.strip()):
             return _clause(text.split(". ", 1)[0])
     return ""
 

@@ -375,3 +375,15 @@ def test_rows_too_small_to_show_do_not_stop_the_opening():
 
     assert _paths(rows) == ["app/api", "app/front", "static/js"]
     assert omitted == 2
+
+def test_a_localisation_key_is_not_a_role(tmp_path):
+    _write(tmp_path, "ext/package.json", '{"name": "ext", "description": "%extension.description%"}')
+    files = [
+        *_files("typescript", "ext/src/a.ts", "ext/src/b.ts"),
+        *_files("typescript", "lib/src/c.ts"),
+        *_files("json", "ext/package.json", "lib/package.json"),
+    ]
+    manifests = ["ext/package.json", "lib/package.json"]
+    rows, _ = build_package_rows(files, manifests, [], [], repo_root=tmp_path)
+
+    assert rows[0].path == "ext" and rows[0].role == ""
