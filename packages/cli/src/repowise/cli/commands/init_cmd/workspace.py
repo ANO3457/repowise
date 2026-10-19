@@ -912,7 +912,9 @@ def _workspace_init(
 
     # A dry run writes nothing for any repo, so nothing at the workspace level.
     if not dry_run:
-        _save_workspace(ws_config, root, selected, totals.errors, editor_setup=editor_setup)
+        _save_workspace(
+            ws_config, root, selected, totals.errors, editor_setup=editor_setup, yes=yes
+        )
 
     show_workspace_completion(
         selected=selected,
@@ -957,7 +959,13 @@ def _select_workspace_repos(scan: Any, *, select_all: bool) -> tuple[list[Any], 
 
 
 def _save_workspace(
-    ws_config: Any, root: Path, selected: list[Any], errors: list, *, editor_setup: bool
+    ws_config: Any,
+    root: Path,
+    selected: list[Any],
+    errors: list,
+    *,
+    editor_setup: bool,
+    yes: bool,
 ) -> None:
     """Save the indexed timestamps, run cross-repo analysis, register the primary."""
     ws_config.save(root)
@@ -965,7 +973,10 @@ def _save_workspace(
     primary_entry = ws_config.get_primary()
     if primary_entry:
         primary_path = (root / primary_entry.path).resolve()
-        register_editor_clients(console, primary_path, no_editor_setup=not editor_setup)
+        from repowise.cli.editor_integrations.global_mcp import confirm_global_mcp
+
+        if confirm_global_mcp(console, primary_path, yes=yes, no_editor_setup=not editor_setup):
+            register_editor_clients(console, primary_path)
 
 
 def _ask_workspace_mode(
