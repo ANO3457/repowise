@@ -149,6 +149,10 @@ def _finish_upgrade_state(
         # Record who wrote the pages, or `status` reports them as unknown.
         state["provider"] = provider_block["name"]
         state["model"] = provider_block["model"]
+    else:
+        # No model wrote these pages, whatever an earlier run recorded.
+        state.pop("provider", None)
+        state.pop("model", None)
     # Every onboarding slot was evaluated against whole-repo signals, so the
     # missing-slot notice has nothing left to report.
     stamp_offered_slots(state, enabled=config.enable_onboarding)

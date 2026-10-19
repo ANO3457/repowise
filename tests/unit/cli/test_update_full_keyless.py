@@ -94,6 +94,9 @@ def _upgrade(repo: Path, **kwargs) -> None:
 
 def test_keyless_upgrade_builds_documentation_from_code(tmp_path: Path, keyless: dict) -> None:
     repo = _repo(tmp_path)
+    stale = load_state(repo)
+    stale.update(provider="gemini", model="old")
+    save_state(repo, stale)
     _upgrade(repo)
 
     assert keyless["provider"].provider_name == "template"
