@@ -93,7 +93,8 @@ def _make_gate(dry_run: bool):
     def gate_cost(
         cost_plans: Any, provider: Any, repo_path: Path, *, yes: bool, dry_run: bool
     ) -> bool:
-        from repowise.cli.commands.init_cmd.generation import cost_gate_blocks, format_cost
+        from repowise.cli.commands.init_cmd.generation import cost_gate_blocks
+        from repowise.cli.cost_gate import spend_phrase
         from repowise.core.cost_estimator import estimate_cost
 
         est = None
@@ -108,7 +109,7 @@ def _make_gate(dry_run: bool):
             pages = sum(p.count for p in cost_plans)
             console.print(
                 f"Writing [bold]{pages}[/bold] pages with "
-                f"[cyan]{provider.model_name}[/cyan]. Estimated [bold]{format_cost(est)}[/bold]."
+                f"[cyan]{provider.model_name}[/cyan]. {spend_phrase(est)}."
             )
 
         if dry_run:

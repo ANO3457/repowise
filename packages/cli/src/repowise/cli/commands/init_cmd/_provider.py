@@ -92,6 +92,24 @@ def _resolve_or_fall_back(run: InitRun) -> None:
             console.print(f"  [dim]{exc}[/dim]")
 
 
+def note_subscription_cli(run: InitRun) -> None:
+    """Name a logged-in Claude Code / Codex / OpenCode on a run no model writes.
+
+    Never switches the run to it: a subscription is spent only when asked for
+    with --provider. Interactive runs got the picker instead, and a configured
+    provider is already a choice.
+    """
+    if run.is_interactive or run.opts.provider_name or run.config.get("provider"):
+        return
+    if not (run.opts.index_only or run.no_provider):
+        return
+    from repowise.cli.ui.subscription import ready_agent_providers, subscription_note
+
+    note = subscription_note(ready_agent_providers())
+    if note:
+        console.print(f"  [dim]{note}[/dim]")
+
+
 def _print_provider_summary(run: InitRun) -> None:
     provider = run.provider
     if not run.is_interactive and not run.no_provider:
