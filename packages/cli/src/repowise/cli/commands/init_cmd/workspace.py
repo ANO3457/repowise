@@ -67,6 +67,7 @@ from repowise.cli.ui import (
 )
 from repowise.cli.ui.glyphs import glyph
 from repowise.cli.ui.mode_names import pages
+from repowise.cli.ui.subscription import SubscriptionContext
 from repowise.core.decision_lanes import record_decision_lanes
 from repowise.core.docs_mode import docs_mode_state_fields
 from repowise.core.generation.styles import DEFAULT_STYLE
@@ -985,6 +986,7 @@ def _ask_workspace_mode(
         adv = interactive_advanced_config(
             console,
             prompt_reasoning=False,
+            generate_docs=not answers.index_only,
             wiki_style=answers.wiki_style,
             language=answers.language,
         )
@@ -1002,7 +1004,11 @@ def _ask_workspace_provider(
         answers.reasoning,
         repo_path=primary_repo.path,
         save_key=save_key,
+        subscription=SubscriptionContext(allow_skip=True),
     )
+    if selection is None:
+        answers.index_only = True
+        return
     answers.provider_name = selection.provider_name
     answers.model = selection.model
     answers.reasoning = selection.reasoning

@@ -1,4 +1,4 @@
-"""Interactive mode selection, fast-mode offer, and advanced configuration."""
+"""Interactive mode selection and advanced configuration."""
 
 from __future__ import annotations
 
@@ -54,39 +54,6 @@ def should_offer_fast_mode(scan: RepoScanInfo | None) -> bool:
     return scan is not None and scan.total_files > LARGE_REPO_FILE_THRESHOLD
 
 
-def interactive_fast_mode_offer(
-    console: Console,
-    scan: RepoScanInfo | None,
-    *,
-    default_fast: bool,
-) -> bool:
-    """Offer fast mode after a large repo is detected. Returns True to use it.
-
-    Shown only when :func:`should_offer_fast_mode` is true. Fast mode is a quick
-    first index (dependency graph + essential git history, metrics in SQL) with
-    no per-file blame, no co-change walk, and no LLM docs — backfillable later.
-    """
-    n = scan.total_files if scan else 0
-    body = Text()
-    body.append("  Large repository detected: ", style="bold")
-    body.append(f"{n:,} files.\n\n", style=BRAND_STYLE)
-    body.append(f"  Fast mode runs a quick first index ({INDEX_ONLY.lower()}):\n", style="bold")
-    bullet = glyph("bullet")
-    body.append(f"    {bullet} dependency graph + essential git history\n")
-    body.append(f"    {bullet} graph metrics materialized to SQL\n")
-    body.append(f"    {bullet} no per-file blame, no co-change walk, no documentation\n\n")
-    body.append("  You can add full git history and documentation later.\n", style="dim")
-    console.print(
-        Panel(
-            body,
-            title="[bold]Fast first index?[/bold]",
-            border_style=BRAND,
-            padding=(1, 2),
-        )
-    )
-    return click.confirm("  Use fast mode?", default=default_fast)
-
-
 def interactive_mode_select(console: Console, *, title: str | None = None) -> str:
     """Let the user choose full / index-only / advanced.
 
@@ -138,32 +105,6 @@ def interactive_mode_select(console: Console, *, title: str | None = None) -> st
         console=console,
     )
     return {"1": "full", "2": "index_only", "3": "advanced"}[choice]
-
-
-def interactive_generate_docs_toggle(console: Console) -> bool:
-    """Advanced-mode entry: ask whether to generate AI wiki docs.
-
-    Returns True for a full doc-generating run, False for an index-only run that
-    still flows through the indexing-configuration prompts. Indexing (graph, git,
-    code health, dead code) is free; only doc generation calls the LLM.
-    """
-    console.print()
-    console.print(
-        "  [dim]Documentation written by a model calls the LLM (has a cost). Say no and "
-        "you still\n  get documentation, built from code, for free.[/dim]"
-    )
-    return click.confirm("  Have a model write the documentation?", default=True)
-
-
-def interactive_customize_offer(console: Console, *, generate_docs: bool) -> bool:
-    """Offer to drop into advanced configuration from full / index-only modes.
-
-    Returns True when the user wants to tune the defaults rather than accept
-    them. The label tracks whether generation knobs are in scope.
-    """
-    what = "indexing & generation" if generate_docs else "indexing"
-    console.print()
-    return click.confirm(f"  Customize {what} options?", default=False)
 
 
 def prompt_wiki_style(console: Console) -> str:
@@ -325,11 +266,13 @@ def _prompt_run_mode(
     # by default on large repos; off otherwise. Only offered for single-repo
     # init (allow_fast); the workspace path leaves this untouched.
     if allow_fast:
-        print_section(
-            console,
-            "Run mode",
-            f"standard = full depth · fast = {INDEX_ONLY.lower()}, quick graph + essential git",
-        )
+        blurb = f"standard = full depth · fast = {INDEX_ONLY.lower()}, quick graph + essential git"
+        if is_large:
+            blurb += (
+                f"\n  fast is the default here: it is recommended above "
+                f"{LARGE_REPO_FILE_THRESHOLD:,} files"
+            )
+        print_section(console, "Run mode", blurb)
         result["run_mode"] = click.prompt(
             "  Run mode",
             default="fast" if is_large else "standard",
@@ -378,8 +321,17 @@ def _prompt_exclude(
     return patterns
 
 
-def _prompt_git(console: Console, scan: RepoScanInfo | None, result: dict[str, Any]) -> None:
-    """Git-analysis section: commit limit + rename following."""
+def _prompt_git(
+    console: Console,
+    scan: RepoScanInfo | None,
+    result: dict[str, Any],
+    commit_limit: int | None = None,
+) -> None:
+    """Git-analysis section: commit limit + rename following.
+
+    *commit_limit* is the ``--commit-limit`` flag, offered as the default so
+    Enter keeps it.
+    """
     commit_hint = ""
     if scan and scan.total_commits:
         commit_hint = f" (repo has ~{scan.total_commits:,} total commits)"
@@ -391,7 +343,7 @@ def _prompt_git(console: Console, scan: RepoScanInfo | None, result: dict[str, A
 
     val = click.prompt(
         "  Max commits per file",
-        default=_DEFAULT_COMMIT_LIMIT,
+        default=commit_limit or _DEFAULT_COMMIT_LIMIT,
         type=int,
     )
     val = max(1, min(val, 10000))
@@ -549,6 +501,7 @@ def interactive_advanced_config(
     generate_docs: bool = True,
     wiki_style: str | None = None,
     language: str | None = None,
+    commit_limit: int | None = None,
 ) -> dict[str, Any]:
     """Prompt for advanced init options, grouped into logical sections.
 
@@ -586,7 +539,7 @@ def interactive_advanced_config(
     _prompt_scope(console, scan, result)
     _prompt_run_mode(console, result, allow_fast=allow_fast, is_large=is_large)
     patterns = _prompt_exclude(console, scan, result)
-    _prompt_git(console, scan, result)
+    _prompt_git(console, scan, result, commit_limit)
     # Asked in both branches: an index-only run renders file pages too (they need
     # no model), so page volume is a real question either way. Fast mode renders
     # no wiki at all, so there is nothing to bound.
