@@ -12,6 +12,7 @@ from rich.console import Console
 from repowise.cli.agent_targets import registry
 from repowise.cli.commands.init_cmd.command import _interactive_gate
 from repowise.cli.ui import provider_selection as ui
+from repowise.cli.ui.subscription import SubscriptionContext
 from repowise.core.agents.identity import identity_for_target_id
 
 
@@ -45,7 +46,9 @@ def _default_pick(
 
     monkeypatch.setattr(ui.Prompt, "ask", ask)
     buf = io.StringIO()
-    ui._interactive_provider_name(Console(file=buf, width=120), None, prefer=prefer)
+    ui._interactive_provider_name(
+        Console(file=buf, width=120), None, subscription=SubscriptionContext(prefer=prefer)
+    )
     return ui._PROVIDER_CHOICES[int(seen["default"]) - 1], buf.getvalue()
 
 

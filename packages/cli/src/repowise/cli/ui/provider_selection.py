@@ -29,6 +29,7 @@ from repowise.cli.ui.openai_compatible import (
     prompt_setup as _prompt_openai_compatible_setup_values,
 )
 from repowise.cli.ui.subscription import (
+    SubscriptionContext,
     agent_cli_status,
     ready_agent_providers,
     subscription_estimate,
@@ -56,6 +57,9 @@ _PROVIDER_DEFAULTS: dict[str, str] = {
 _PROVIDER_ENV: dict[str, str] = {
     name: spec.required_envs[0] for name, spec in _PICKER_SPECS.items() if spec.required_envs
 }
+
+# No repo preference and no estimate: the picker as other commands show it.
+_NO_SUBSCRIPTION = SubscriptionContext()
 
 _OLLAMA_DEFAULT_BASE_URL = "http://localhost:11434"
 # The OpenAI adapter is also the generic adapter for local gateways. Keep the
@@ -262,9 +266,7 @@ def _interactive_provider_name(
     *,
     repo_path: Path | None = None,
     save_key: bool = True,
-    prefer: tuple[str, ...] = (),
-    model_calls: int | None = None,
-    concurrency: int = 10,
+    subscription: SubscriptionContext = _NO_SUBSCRIPTION,
 ) -> str:
     """Show provider table, handle selection + inline key entry + save.
 
@@ -308,10 +310,12 @@ def _interactive_provider_name(
     console.print()
     console.print(table)
     # A subscription run costs quota and time, not dollars: say how much.
-    if model_calls:
+    if subscription.model_calls:
         for prov in detected:
             if _PICKER_SPECS.get(prov) is not None and _PICKER_SPECS[prov].agent:
-                estimate = subscription_estimate(prov, model_calls, concurrency)
+                estimate = subscription_estimate(
+                    prov, subscription.model_calls, subscription.concurrency
+                )
                 console.print(f"  [dim]{prov} {estimate}.[/dim]")
     console.print(
         "  [dim]mock is flag-only (writes placeholder pages): repowise init --provider mock[/dim]"
@@ -323,7 +327,7 @@ def _interactive_provider_name(
     # Detection order is auto-detection's, so the default is what --yes runs.
     default_idx = str(providers.index(next(iter(detected))) + 1) if detected else "1"
     # The CLI of the agent set up here outranks a key: it is the user's own login.
-    recommended = next((name for name in prefer if name in detected), None)
+    recommended = next((name for name in subscription.prefer if name in detected), None)
     if recommended is not None:
         default_idx = str(providers.index(recommended) + 1)
         agent = identity_for_provider(recommended)
@@ -367,9 +371,7 @@ def _interactive_provider_name(
                 model_flag,
                 repo_path=repo_path,
                 save_key=save_key,
-                prefer=prefer,
-                model_calls=model_calls,
-                concurrency=concurrency,
+                subscription=subscription,
             )
         env_var = _PROVIDER_ENV[chosen]
         signup_url = _PICKER_SPECS[chosen].signup_url
@@ -392,9 +394,7 @@ def _interactive_provider_name(
                 model_flag,
                 repo_path=repo_path,
                 save_key=save_key,
-                prefer=prefer,
-                model_calls=model_calls,
-                concurrency=concurrency,
+                subscription=subscription,
             )
 
     if chosen == "openai" and repo_path is not None:
@@ -644,9 +644,7 @@ def interactive_provider_config_select(
     *,
     repo_path: Path | None = None,
     save_key: bool = True,
-    prefer: tuple[str, ...] = (),
-    model_calls: int | None = None,
-    concurrency: int = 10,
+    subscription: SubscriptionContext = _NO_SUBSCRIPTION,
 ) -> ProviderSelection:
     """Show provider/model/reasoning selection for interactive init.
 
@@ -658,9 +656,7 @@ def interactive_provider_config_select(
         model_flag,
         repo_path=repo_path,
         save_key=save_key,
-        prefer=prefer,
-        model_calls=model_calls,
-        concurrency=concurrency,
+        subscription=subscription,
     )
     if chosen == _OPENAI_COMPATIBLE_CHOICE:
         return _interactive_openai_compatible_select(

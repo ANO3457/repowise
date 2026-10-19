@@ -159,6 +159,19 @@ def _run_deterministic_generation_phase(
     return embedder
 
 
+def _local_server_overloaded(provider_name: str, concurrency: int) -> bool:
+    """A local model server (Ollama) at high concurrency, which can time out.
+
+    An agent CLI bounds its own process count (its estimate says so), so it
+    never needs the advice to lower --concurrency.
+    """
+    from repowise.core.providers.llm.specs import PROVIDER_SPECS
+
+    spec = PROVIDER_SPECS.get(provider_name)
+    is_local_server = spec is not None and spec.local and not spec.agent
+    return is_local_server and concurrency > 4
+
+
 def _print_generation_plan(
     est: Any, result: Any, provider: Any, *, concurrency: int, onboarding: bool
 ) -> None:
@@ -195,12 +208,7 @@ def _print_generation_plan(
         lang_parts = [f"{lang} {pct:.0%}" for lang, pct in lang_items]
         console.print(f"  Languages: {', '.join(lang_parts)}")
 
-    # An agent CLI bounds its own process count (its estimate says so), so
-    # only a local model server needs the advice to lower --concurrency.
-    from repowise.core.providers.llm.specs import PROVIDER_SPECS
-
-    spec = PROVIDER_SPECS.get(provider.provider_name)
-    if spec is not None and spec.local and not spec.agent and concurrency > 4:
+    if _local_server_overloaded(provider.provider_name, concurrency):
         warn(
             f"  {provider.provider_name} is a local provider "
             f"running with concurrency={concurrency}. "

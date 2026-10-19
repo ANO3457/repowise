@@ -12,6 +12,7 @@ import importlib
 import math
 from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 
 from repowise.core.agents.identity import identity_for_provider
 from repowise.core.providers.llm.specs import PROVIDER_SPECS
@@ -27,6 +28,20 @@ AGENT_PROVIDERS: tuple[str, ...] = tuple(
 # took about an hour (docs/agent/CLAUDE_CODE_PROVIDER.md), so a minute a call
 # is the planning figure. Rough on purpose: it sizes the wait, not a deadline.
 SECONDS_PER_CALL = 60
+
+
+@dataclass(frozen=True)
+class SubscriptionContext:
+    """What the picker needs to offer an agent CLI.
+
+    *prefer*: agent CLIs set up in this repo, the first ready one becomes the
+    default (see ``agent_providers_set_up``). *model_calls* and *concurrency*
+    size the quota and time estimate; no estimate is shown without calls.
+    """
+
+    prefer: tuple[str, ...] = ()
+    model_calls: int | None = None
+    concurrency: int = 10
 
 
 def agent_cli_status(name: str) -> tuple[bool, bool]:
@@ -112,6 +127,7 @@ def subscription_note(ready: tuple[str, ...]) -> str | None:
 __all__ = [
     "AGENT_PROVIDERS",
     "SECONDS_PER_CALL",
+    "SubscriptionContext",
     "agent_cli_status",
     "model_call_count",
     "process_limit",

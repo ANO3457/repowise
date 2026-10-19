@@ -102,7 +102,9 @@ def test_a_key_outranks_a_logged_in_cli_without_a_preference(monkeypatch: Any) -
 
 def test_picker_shows_quota_and_time_for_a_logged_in_cli(monkeypatch: Any) -> None:
     _logged_in(monkeypatch, "claude_cli")
-    _chosen, out = _default_pick(monkeypatch, model_calls=14, concurrency=10)
+    _chosen, out = _default_pick(
+        monkeypatch, subscription=subscription.SubscriptionContext(model_calls=14, concurrency=10)
+    )
     assert "claude_cli uses your Claude Code login, about 14 model calls, 4 at a time" in out
     assert "about 4 min" in out
     assert "$0.00" not in out

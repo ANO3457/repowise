@@ -23,6 +23,7 @@ from repowise.cli.ui import (
     quick_repo_scan,
     should_offer_fast_mode,
 )
+from repowise.cli.ui.subscription import SubscriptionContext
 
 from ._options import InitRun
 
@@ -84,9 +85,11 @@ def _ask_provider(run: InitRun, scan_info: Any = None) -> None:
         opts.reasoning,
         repo_path=run.repo_path,
         save_key=opts.save_key,
-        prefer=agent_providers_set_up(run.repo_path),
-        model_calls=model_call_count(plans),
-        concurrency=opts.concurrency,
+        subscription=SubscriptionContext(
+            prefer=agent_providers_set_up(run.repo_path),
+            model_calls=model_call_count(plans),
+            concurrency=opts.concurrency,
+        ),
     )
     run.opts = replace(
         opts,
