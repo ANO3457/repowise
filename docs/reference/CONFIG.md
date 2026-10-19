@@ -13,6 +13,7 @@ The `.repowise/` directory, provider setup, API keys, and what's customizable.
 [The `distill:` block](#the-distill-block) ·
 [The `hooks:` block](#the-hooks-block) ·
 [The `mcp:` block](#the-mcp-block) ·
+[The `editor_files:` block](#the-editor_files-block) ·
 [The `decisions:` block](#the-decisions-block) ·
 [`policies.yaml`](#repowisepoliciesyaml) ·
 [The `security:` block](#the-security-block) ·
@@ -406,6 +407,25 @@ mcp:
   `get_blast_radius`, `get_conformance` and `get_architecture`. None is on by
   default. The workspace-only three are ignored if named in single-repo mode. See
   [MCP_TOOLS.md](../agent/MCP_TOOLS.md#configuring-the-tool-surface).
+
+### The `editor_files:` block
+
+Controls the generated block in `.claude/CLAUDE.md` and `AGENTS.md`. The block
+is read into the agent's context on every turn, so the default is lean.
+`sections` adjusts it with the `mcp.tools` grammar: `+name` / `-name` change
+the default set, unprefixed names replace it.
+
+```yaml
+editor_files:
+  claude_md: true
+  sections: ["+commands", "+fix_first"]
+```
+
+- Default: `architecture`, `key_modules`, `entry_points`, `hotspots`, `health`
+  (score and worst file), `decisions` (top three titles), `how_to_work` (three
+  bullets), `tools`.
+- Opt-in: `code_health` (all health signals, replaces `health`), `fix_first`,
+  `commands` (build/test/lint read from manifests), `how_to_work_full`.
 
 ### The `decisions:` block
 

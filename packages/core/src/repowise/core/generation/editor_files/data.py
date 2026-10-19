@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from .sections import DEFAULT_SECTIONS
+
 
 def _render_tool_table(*, keyless: bool = False) -> str:
     # Local import: tool_table is a leaf module; importing lazily keeps data.py
@@ -42,12 +44,13 @@ class HotspotFile:
     owner: str | None
     # Bug-fix history for the same file. ``fix_count`` is the windowed
     # production-code fix count (``GitMetadata.prior_defect_count``), and
-    # ``last_fix_age`` is pre-rendered ("2 weeks ago") because a count with no
-    # recency reads as an accusation about 2019. ``bug_magnet`` is only ever set
-    # alongside an age, per the recency contract in ``types/health.ts``.
+    # ``last_fix_date`` (``YYYY-MM-DD``) anchors it, because a count with no
+    # recency reads as an accusation about 2019. A date rather than an age: the
+    # file is not regenerated daily, so "yesterday" goes stale. ``bug_magnet`` is
+    # only ever set alongside a date, per the recency contract in ``types/health.ts``.
     fix_count: int = 0
     bug_magnet: bool = False
-    last_fix_age: str | None = None
+    last_fix_date: str | None = None
 
 
 @dataclass(frozen=True)
@@ -133,6 +136,7 @@ class EditorFileData:
     kg_layers: list[KGLayerSummary] = field(default_factory=list)
     kg_tour: list[KGTourStepSummary] = field(default_factory=list)
     index_scope: dict = field(default_factory=dict)
+    sections: frozenset[str] = DEFAULT_SECTIONS
 
     @property
     def keyless(self) -> bool:
@@ -143,6 +147,27 @@ class EditorFileData:
             scope.get("content_provenance") in ("template", "none")
             and search.get("semantic") == "unavailable"
         )
+
+    @property
+    def scope_gaps(self) -> list[str]:
+        """What this index lacks, for the header; empty when nothing does."""
+        scope = self.index_scope
+        upgrade = scope.get("upgrade") if isinstance(scope.get("upgrade"), dict) else {}
+        gaps = []
+        if self.keyless:
+            gaps.append("no model (template prose, full-text search)")
+        if scope.get("git_tier") == "essential":
+            gaps.append("essential Git history only")
+        if self.upgrade_pending:
+            gaps.append(f"model upgrade {upgrade.get('status')}")
+        return gaps
+
+    @property
+    def upgrade_pending(self) -> bool:
+        upgrade = self.index_scope.get("upgrade")
+        status = upgrade.get("status") if isinstance(upgrade, dict) else None
+        # `--full` needs a key, so a keyless index is never told to continue one.
+        return status in ("pending", "resumable", "failed") and not self.keyless
 
     @property
     def tool_table_md(self) -> str:
