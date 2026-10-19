@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +12,7 @@ from repowise.cli.helpers import console, load_config, warn
 from repowise.cli.ui import BRAND, VALUE, print_phase_header
 from repowise.core.generation.styles import DEFAULT_STYLE
 
+from ._exit import COST_UNCONFIRMED_BUILT, COST_UNCONFIRMED_KEPT
 from ._options import InitRun
 from .generation import (
     concept_page_count,
@@ -364,6 +366,10 @@ def _generate_with_model(run: InitRun) -> bool:
     )
     if gen_stop:
         return True
+    # Declined with no terminal means nobody said no: the run finishes degraded.
+    if cost_declined and not sys.stdin.isatty():
+        kept = run.prior_docs_mode == "llm"
+        run.gaps.append(COST_UNCONFIRMED_KEPT if kept else COST_UNCONFIRMED_BUILT)
     if cost_declined and run.prior_docs_mode == "llm":
         # Declining new pages is no request to replace the written ones.
         console.print(

@@ -6,7 +6,6 @@ import sys
 from pathlib import Path
 from typing import Any
 
-import click
 from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 
 from repowise.cli.commands._index_outcome import record_index_outcome, refresh_read_snapshots
@@ -405,12 +404,19 @@ def complete_setup(run: InitRun) -> None:
     )
 
 
-def raise_on_embed_failure(run: InitRun) -> None:
-    """Exit non-zero when embedding failed; raised last so everything else is kept."""
+def exit_with_gaps(run: InitRun) -> None:
+    """Exit degraded when the run left a gap; last, so everything else is kept."""
     from repowise.cli.providers import embed_failure_message
 
-    embed_error = embed_failure_message(
-        run.scope_embedder, getattr(run.result, "embed_failed_pages", 0)
+    from ._exit import exit_on_gaps, run_gaps
+
+    result = run.result
+    exit_on_gaps(
+        run.gaps
+        + run_gaps(
+            failed_pages=len(getattr(result, "failed_page_ids", None) or []),
+            embed_error=embed_failure_message(
+                run.scope_embedder, getattr(result, "embed_failed_pages", 0)
+            ),
+        )
     )
-    if embed_error:
-        raise click.ClickException(embed_error)
