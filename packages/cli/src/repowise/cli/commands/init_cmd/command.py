@@ -17,16 +17,18 @@ from typing import Any
 import click
 
 from repowise.cli.errors import reasoned_error
+from repowise.cli.exit_codes import EXIT_CODES_HELP
 from repowise.cli.helpers import resolve_repo_path
 from repowise.core.analysis.health.coverage import PARSERS as COVERAGE_PARSERS
 from repowise.core.generation.languages import SUPPORTED_LANGUAGES
 from repowise.core.generation.styles import list_styles, resolve_style
 from repowise.core.reasoning import REASONING_MODES
 
+from ._exit import exit_interrupted
 from ._finish import (
     complete_setup,
+    exit_with_gaps,
     persist_index,
-    raise_on_embed_failure,
     register_clients,
 )
 from ._generate import (
@@ -123,7 +125,7 @@ def _run_workspace_init(opts: InitOptions, scan: Any) -> None:
     )
 
 
-@click.command("init")
+@click.command("init", epilog=EXIT_CODES_HELP)
 @click.argument("path", required=False, default=None)
 @click.option(
     "--provider",
@@ -453,7 +455,16 @@ def init_command(**params: Any) -> None:
     structural either way.
     Use --mode fast for a quick graph + essential-git index of a very large repo.
     """
-    opts = resolve_structural_flags(InitOptions(**params))
+    from repowise.core.cancellation import PipelineCancelled
+
+    try:
+        _run_init(resolve_structural_flags(InitOptions(**params)))
+    except (PipelineCancelled, KeyboardInterrupt):
+        exit_interrupted()
+
+
+def _run_init(opts: InitOptions) -> None:
+    """The whole init, one repo or a workspace; exits 2 when it finishes with gaps."""
     start = time.monotonic()
     repo_path = resolve_repo_path(opts.path)
 
@@ -480,8 +491,12 @@ def init_command(**params: Any) -> None:
         repo_path = scan.repos[0].path
 
     run = _prepare_single_repo(opts, repo_path, start)
-    if run is None or not index_repository(run):
+    if run is None:
         return
+    index_repository(run)
+    # Each one is an analysis step the pipeline skipped on an error.
+    if run.run_warnings:
+        run.gaps.append(f"{len(run.run_warnings):,} warning(s) while indexing (see above)")
 
     show_analysis_summary(run.result)
     if _generate(run):
@@ -492,4 +507,4 @@ def init_command(**params: Any) -> None:
     persist_index(run)
     register_clients(run)
     complete_setup(run)
-    raise_on_embed_failure(run)
+    exit_with_gaps(run)

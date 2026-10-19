@@ -64,6 +64,7 @@ from repowise.cli.ui import (
 from repowise.core.docs_mode import docs_mode_state_fields
 from repowise.core.generation.styles import DEFAULT_STYLE
 
+from ._exit import COST_UNCONFIRMED_BUILT, exit_on_gaps
 from ._interactive import offer_distill_rewrite_hook, offer_hook_install
 from .generation import (
     CostGateDeclined,
@@ -284,6 +285,8 @@ class _WorkspaceCtx:
     #: Same reasoning for key persistence: each workspace repo gets its own
     #: .repowise/, so each needs its own credential to be MCP-answerable.
     save_key: bool = True
+    #: Asked-for work a repo did not get; any entry makes init exit degraded.
+    gaps: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -491,6 +494,8 @@ def _generate_repo_with_model(
     except CostGateDeclined:
         # Declining only meant "not at that price": fall back to the free
         # template renderer rather than leave the repo with no wiki.
+        if not sys.stdin.isatty():
+            ctx.gaps.append(f"{repo.alias}: {COST_UNCONFIRMED_BUILT}")
         console.print(
             "    [dim]Building this repo's wiki from structure instead. Run "
             "[bold]repowise update --repo "
@@ -500,6 +505,7 @@ def _generate_repo_with_model(
     except Exception as gen_exc:
         console.print(f"    [{ERR}]✗ Generation failed: {gen_exc}[/]\n")
         docs.skip_reason = f"generation error: {gen_exc}"
+        ctx.gaps.append(f"{repo.alias}: documentation not written ({gen_exc})")
         result.generated_pages = []
 
 
@@ -888,7 +894,7 @@ def _workspace_init(
             editor_setup=editor_setup,
         )
     console.print()
-    _raise_on_embed_failures(totals.embed_failures)
+    exit_on_gaps(_workspace_gaps(ctx, totals))
 
 
 def _select_workspace_repos(scan: Any, *, select_all: bool) -> tuple[list[Any], str, Any] | None:
@@ -1127,17 +1133,17 @@ def _offer_workspace_hooks(
     )
 
 
-def _raise_on_embed_failures(embed_failures: dict[str, int]) -> None:
-    """Fail a scripted run whose semantic indexes were not built.
-
-    Raised after every repo is persisted, as single-repo init does.
-    """
-    if embed_failures:
-        import click
-
-        listed = ", ".join(f"{alias} ({n} page(s))" for alias, n in embed_failures.items())
-        raise click.ClickException(
+def _workspace_gaps(ctx: _WorkspaceCtx, totals: _WorkspaceTotals) -> list[str]:
+    """Every repo's gaps, raised after each one is persisted, as single-repo init does."""
+    gaps = list(ctx.gaps)
+    if totals.errors:
+        failed = ", ".join(alias for alias, _ in totals.errors)
+        gaps.append(f"{len(totals.errors):,} repo(s) failed to index ({failed})")
+    if totals.embed_failures:
+        listed = ", ".join(f"{alias} ({n:,} page(s))" for alias, n in totals.embed_failures.items())
+        gaps.append(
             f"Embedding failed for {listed}, so semantic search is unavailable there "
             "(full-text search still works). Fix the cause in the warnings above, "
-            "then run: repowise reindex in each."
+            "then run: repowise reindex in each"
         )
+    return gaps

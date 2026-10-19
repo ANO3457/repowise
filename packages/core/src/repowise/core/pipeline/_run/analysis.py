@@ -44,7 +44,7 @@ def _limit_test_run(run: PipelineRun) -> None:
         run.parsed_files, run.graph_builder, n=TEST_RUN_FILE_LIMIT
     )
     if run.progress:
-        run.progress.on_message("warning", f"Test run: limiting to {len(run.parsed_files)} files")
+        run.progress.on_message("notice", f"Test run: limiting to {len(run.parsed_files)} files")
 
 
 async def _rehydrate_analysis(run: PipelineRun) -> bool:
