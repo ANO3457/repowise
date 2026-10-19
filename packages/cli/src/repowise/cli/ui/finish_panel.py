@@ -16,6 +16,7 @@ from rich.markup import escape
 from rich.padding import Padding
 from rich.text import Text
 
+from repowise.cli.ui import mascot
 from repowise.cli.ui.brand import BRAND, WARN, key_value_table
 from repowise.cli.ui.mode_names import INDEX_ONLY, completion_title, mode_label, scope_line
 from repowise.cli.ui.result_panels import build_completion_panel
@@ -218,8 +219,12 @@ def build_finish_panel(
     setup: Any = None,
     repo_path: Path | None = None,
     files_written: list[Path] | None = None,
+    owl: str = mascot.DONE,
 ) -> Any:
-    """The init completion panel: counts, Connected, questions, steps, receipt."""
+    """The init completion panel: counts, Connected, questions, steps, receipt.
+
+    *owl* is the title owl's state: how the run finished.
+    """
     body: list[RenderableType] = []
     connected = connected_lines(setup)
     if connected:
@@ -232,4 +237,5 @@ def build_finish_panel(
         next_steps=steps,
         body=body,
         footer=_footer(facts, setup, repo_path or Path("."), files_written or []),
+        owl=owl,
     )

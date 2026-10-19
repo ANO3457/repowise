@@ -10,7 +10,9 @@ import click
 from repowise.cli.errors import reasoned_error
 from repowise.cli.helpers import console, resolve_explicit_provider_or_prompt, run_async
 from repowise.cli.providers import resolve_embedder_choice, template_run_embedder
-from repowise.cli.ui import OK, OWL_SPINNER, VALUE, WARN, print_index_only_intro
+from repowise.cli.ui import MODEL, OK, VALUE, WARN, print_index_only_intro
+from repowise.cli.ui.glyphs import glyph
+from repowise.cli.ui.mascot import owl_status
 from repowise.cli.ui.mode_names import BUILT_FROM_CODE, INDEX_ONLY, written_by
 
 from ._options import InitRun
@@ -96,7 +98,7 @@ def _print_provider_summary(run: InitRun) -> None:
         console.print(f"[bold]repowise init[/bold] · {mode} · {run.repo_path}")
     if provider is not None:
         console.print(
-            f"  Provider: [{VALUE}]{provider.provider_name}[/] / Model: [{VALUE}]{provider.model_name}[/]"
+            f"  Provider: [{VALUE}]{provider.provider_name}[/] / Model: [{MODEL}]{provider.model_name}[/]"
         )
     console.print(f"  Embedder: [{VALUE}]{_stated_embedder(run)}[/]")
     if run.language != "en":
@@ -122,7 +124,7 @@ def _verify_provider(provider: Any, reasoning: str) -> None:
     """One tiny generate call, so a bad key fails before the index is built."""
     from repowise.core.providers.llm.base import ProviderError
 
-    with console.status("  Verifying provider connection…", spinner=OWL_SPINNER):
+    with owl_status(console, f"  Verifying provider connection{glyph('ellipsis')}"):
         try:
             run_async(
                 provider.generate(
@@ -140,7 +142,7 @@ def _verify_provider(provider: Any, reasoning: str) -> None:
                 f"Provider validation failed: {exc}",
                 reason="provider_validation_failed",
             ) from exc
-    console.print(f"  [{OK}]✓[/] Provider connection verified")
+    console.print(f"  [{OK}]{glyph('ok')}[/] Provider connection verified")
 
 
 def resolve_docs_provider(run: InitRun) -> None:

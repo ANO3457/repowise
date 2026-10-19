@@ -18,9 +18,11 @@ from repowise.cli.ui import (
     build_completion_panel,
     build_contextual_next_steps,
     format_elapsed,
+    mascot,
     print_analysis_summary,
 )
 from repowise.cli.ui.finish_panel import FinishFacts, build_finish_panel
+from repowise.cli.ui.glyphs import glyph
 from repowise.cli.ui.mode_names import TITLE_WORKSPACE, pages
 from repowise.cli.ui.result_panels import serve_step
 from repowise.core.index_scope import fast_to_full_command
@@ -144,8 +146,11 @@ def show_completion(
     setup: Any = None,
     files_written: list[Path] | None = None,
     verbose: bool = False,
+    owl: str = mascot.DONE,
 ) -> None:
     """Render the one finish panel; the generation checks only under ``-v``.
+
+    *owl* is the mini owl state on the panel title: how the run finished.
 
     *setup* is the :class:`~repowise.cli.editor_setup.EditorSetupOutcome`
     snapshot and *files_written* what editor setup put in the working tree,
@@ -198,6 +203,7 @@ def show_completion(
             setup=setup,
             repo_path=Path(repo_path),
             files_written=files_written,
+            owl=owl,
         )
     )
     console.print()
@@ -316,7 +322,12 @@ def show_workspace_completion(
 
     console.print()
     console.print(
-        build_completion_panel(TITLE_WORKSPACE, metrics, next_steps=next_steps)
+        build_completion_panel(
+            TITLE_WORKSPACE,
+            metrics,
+            next_steps=next_steps,
+            owl=mascot.WARNED if errors else mascot.DONE,
+        )
     )
     console.print()
 
@@ -329,10 +340,11 @@ def show_workspace_completion(
         for alias, (count, reason) in docs_outcomes.items():
             if reason:
                 console.print(
-                    f"  [{WARN}]✗[/] {alias:<20} [{WARN}]skipped[/]  [dim]({reason})[/dim]"
+                    f"  [{WARN}]{glyph('fail')}[/] {alias:<20} [{WARN}]skipped[/]  "
+                    f"[dim]({reason})[/dim]"
                 )
             else:
-                console.print(f"  [{OK}]✓[/] {alias:<20} [{OK}]{pages(count)}[/]")
+                console.print(f"  [{OK}]{glyph('ok')}[/] {alias:<20} [{OK}]{pages(count)}[/]")
         if docs_skipped:
             first = docs_skipped[0][0]
             console.print()

@@ -20,6 +20,7 @@ from repowise.cli.ui.brand import (
     key_value_table,
     print_section,
 )
+from repowise.cli.ui.glyphs import glyph
 from repowise.cli.ui.mode_names import BUILT_FROM_CODE, INDEX_ONLY, written_by
 from repowise.cli.ui.repo_scanner import (
     RepoScanInfo,
@@ -70,9 +71,10 @@ def interactive_fast_mode_offer(
     body.append("  Large repository detected: ", style="bold")
     body.append(f"{n:,} files.\n\n", style=BRAND_STYLE)
     body.append(f"  Fast mode runs a quick first index ({INDEX_ONLY.lower()}):\n", style="bold")
-    body.append("    • dependency graph + essential git history\n")
-    body.append("    • graph metrics materialized to SQL\n")
-    body.append("    • no per-file blame, no co-change walk, no documentation\n\n")
+    bullet = glyph("bullet")
+    body.append(f"    {bullet} dependency graph + essential git history\n")
+    body.append(f"    {bullet} graph metrics materialized to SQL\n")
+    body.append(f"    {bullet} no per-file blame, no co-change walk, no documentation\n\n")
     body.append("  You can add full git history and documentation later.\n", style="dim")
     console.print(
         Panel(
@@ -677,17 +679,18 @@ def print_index_only_intro(console: Console, *, fast: bool = False) -> None:
     console.print()
     # Bullets, not checkmarks: every green ✓ elsewhere in a run means "already
     # done", and this is a forecast.
+    bullet = f"  [{DIM}]{glyph('bullet')}[/]"
     lines = [
-        "  [dim]•[/dim] Parse all source files (AST)",
-        "  [dim]•[/dim] Build dependency graph (PageRank, communities)",
-        "  [dim]•[/dim] Index git history (hotspots, ownership, co-changes)",
-        "  [dim]•[/dim] Detect dead code",
-        "  [dim]•[/dim] Extract architectural decisions without a model",
-        "  [dim]•[/dim] Set up MCP server for AI assistants",
+        f"{bullet} Parse all source files (AST)",
+        f"{bullet} Build dependency graph (PageRank, communities)",
+        f"{bullet} Index git history (hotspots, ownership, co-changes)",
+        f"{bullet} Detect dead code",
+        f"{bullet} Extract architectural decisions without a model",
+        f"{bullet} Set up MCP server for AI assistants",
     ]
     if not fast:
         lines[5:5] = [
-            "  [dim]•[/dim] Build documentation from code: file, module, layer and",
+            f"{bullet} Build documentation from code: file, module, layer and",
             "    cycle pages, the architecture diagram, the repo overview, API and",
             "    infra pages, and the onboarding collection",
         ]

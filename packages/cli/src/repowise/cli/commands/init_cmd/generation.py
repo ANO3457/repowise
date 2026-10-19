@@ -40,11 +40,12 @@ from repowise.cli.providers import (
 )
 from repowise.cli.ui import (
     OK,
-    OWL_SPINNER,
     WARN,
     RichProgressCallback,
     make_progress,
 )
+from repowise.cli.ui.glyphs import glyph
+from repowise.cli.ui.mascot import owl_status
 from repowise.core.generation.models import (
     STUB_FALLBACK_ERROR,
     count_stub_fallbacks,
@@ -243,12 +244,12 @@ def _enrich_knowledge_graph(
             result.knowledge_graph_result = _run()
         return
 
-    with console.status("  Enriching knowledge graph (layers + tour)…", spinner=OWL_SPINNER):
+    with owl_status(console, f"  Enriching knowledge graph (layers + tour){glyph('ellipsis')}"):
         try:
             result.knowledge_graph_result = _run()
             enriched = result.knowledge_graph_result
             console.print(
-                f"  [{OK}]✓[/] KG enriched: "
+                f"  [{OK}]{glyph('ok')}[/] KG enriched: "
                 f"{len(enriched.layers)} layers, {len(enriched.tour)} tour steps"
             )
         except Exception as exc:
@@ -434,12 +435,12 @@ def run_repo_generation(
     if failed_page_ids:
         type_counts = Counter(pid.split(":")[0] for pid in failed_page_ids)
         console.print(
-            f"  [{WARN}]⚠[/] Generated [bold]{written_count}[/bold] pages "
-            f"([bold yellow]{len(failed_page_ids)} failed[/bold yellow])\n"
+            f"  [{WARN}]{glyph('warn')}[/] Generated [bold]{written_count}[/bold] pages "
+            f"([bold][{WARN}]{len(failed_page_ids)} failed[/][/bold])\n"
         )
-        console.print("  [bold yellow]Failed pages by type:[/bold yellow]")
+        console.print(f"  [bold][{WARN}]Failed pages by type:[/][/bold]")
         for page_type, count in sorted(type_counts.items(), key=lambda x: -x[1]):
-            console.print(f"    • {page_type}: {count}")
+            console.print(f"    {glyph('bullet')} {page_type}: {count}")
         # Saying only "missing" sends the user looking for absent pages and
         # finding present ones, which reads as the report being wrong. Most
         # failures leave a placeholder behind; --resume replaces those too,
@@ -474,7 +475,7 @@ def run_repo_generation(
             "failed, without re-spending on the ones that succeeded.[/dim]\n"
         )
     elif verbose:
-        console.print(f"  [{OK}]✓[/] Generated [bold]{written_count}[/bold] pages")
+        console.print(f"  [{OK}]{glyph('ok')}[/] Generated [bold]{written_count}[/bold] pages")
 
     # KG enrichment is layer naming and the guided tour, both pure prompting.
     # A deterministic run has no model to ask, and the skeleton's structural
