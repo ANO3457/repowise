@@ -366,26 +366,31 @@ def _generate_with_model(run: InitRun) -> bool:
     )
     if gen_stop:
         return True
-    # Declined with no terminal means nobody said no: the run finishes degraded.
-    if cost_declined and not sys.stdin.isatty():
-        kept = run.prior_docs_mode == "llm"
+    if cost_declined:
+        _after_cost_declined(run)
+    return False
+
+
+def _after_cost_declined(run: InitRun) -> None:
+    """Keep model-written pages, or build from code; a gap when nobody could say no."""
+    kept = run.prior_docs_mode == "llm"
+    if not sys.stdin.isatty():
         run.gaps.append(COST_UNCONFIRMED_KEPT if kept else COST_UNCONFIRMED_BUILT)
-    if cost_declined and run.prior_docs_mode == "llm":
+    if kept:
         # Declining new pages is no request to replace the written ones.
         console.print(
             "  [dim]Keeping the wiki this repo already has. Nothing was "
             "generated and nothing was replaced.[/dim]"
         )
-    elif cost_declined:
-        run.cost_declined = True
-        console.print(
-            "  [dim]Building the wiki from structure instead. Run "
-            "[bold]repowise update --full[/bold] to write it with a "
-            "model later.[/dim]"
-        )
-        # Declining the bill keeps the configured embedder.
-        _render_template_wiki(run, embedder_was_requested=True)
-    return False
+        return
+    run.cost_declined = True
+    console.print(
+        "  [dim]Building the wiki from structure instead. Run "
+        "[bold]repowise update --full[/bold] to write it with a "
+        "model later.[/dim]"
+    )
+    # Declining the bill keeps the configured embedder.
+    _render_template_wiki(run, embedder_was_requested=True)
 
 
 def _generate(run: InitRun) -> bool:
