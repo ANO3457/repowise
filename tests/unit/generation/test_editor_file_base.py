@@ -153,6 +153,12 @@ def test_keyless_index_gets_keyless_steering(any_gen):
     assert "[fts]` only has no semantic agreement" not in result
     assert 'Cite `confidence: "high"`' not in result
     assert "`degraded` means no prose; `confidence` rates the evidence" in result
+    assert "provider key and `repowise generate`" in result
+
+
+def test_index_only_keyless_names_the_fast_to_full_command(any_gen):
+    result = any_gen.render(_scoped({**_KEYLESS_SCOPE, "content_provenance": "none"}))
+    assert "provider key and `repowise update --full`" in result
 
 
 def test_keyed_index_keeps_model_guidance(any_gen):
@@ -497,7 +503,7 @@ def test_render_hotspot_row_falls_back_to_churn_without_fix_history(gen):
 
     data = dataclasses.replace(_minimal_data(), hotspots=[_hotspot("src/a.py")])
     result = gen.render(data)
-    assert "- `src/a.py` — 28 commits/90d" in result
+    assert "- `src/a.py`: 28 commits/90d" in result
     assert "bug fix" not in result
 
 

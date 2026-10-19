@@ -103,7 +103,7 @@ class TestClaudeMdKGSection:
         )
         rendered = tmpl.render(data=data)
         assert "### Key modules" in rendered
-        assert "- `src/api` — API layer" in rendered
+        assert "- `src/api`: API layer" in rendered
         # No purpose → no dangling separator.
         assert "- `src/core`\n" in rendered
 
