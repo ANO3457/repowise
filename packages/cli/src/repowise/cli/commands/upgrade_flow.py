@@ -33,7 +33,12 @@ from typing import Any
 
 import click
 
-from repowise.cli.commands.decision_lanes import print_lane_estimate, run_and_report_lanes
+from repowise.cli.commands.decision_lanes import (
+    print_lane_estimate,
+    run_and_report_lanes,
+    still_pending_after,
+    with_lane_plan,
+)
 from repowise.cli.helpers import (
     console,
     get_head_commit,
@@ -81,9 +86,11 @@ def _gate_cost(
         from repowise.core.cost_estimator import build_generation_plan, estimate_cost
 
         plans = build_generation_plan(parsed_files, graph_builder, config)
-        priced = [*plans, decisions.cost_plan()] if decisions else plans
         est = estimate_cost(
-            priced, provider.provider_name, provider.model_name, repo_path=repo_path
+            with_lane_plan(plans, decisions),
+            provider.provider_name,
+            provider.model_name,
+            repo_path=repo_path,
         )
     except Exception as exc:
         console.print(f"[yellow]Cost estimate unavailable ({exc}); continuing.[/yellow]")
@@ -94,8 +101,7 @@ def _gate_cost(
     structural = structural_page_summary(plans)
     if structural:
         console.print(f"  [dim]{structural}[/dim]")
-    if decisions:
-        print_lane_estimate(decisions, provider)
+    print_lane_estimate(decisions, provider)
 
     # Nothing to ask on a run that cannot be asked. Without this the confirm
     # reads EOF, raises, and the caller reports a successful run that generated
@@ -405,7 +411,7 @@ async def _run_upgrade(
             "embedding_error": embedding_error,
             "stub_fallbacks": stub_fallbacks,
             "stub_reasons": stub_reasons,
-            "decision_lanes_pending": lanes.still_pending if lanes else None,
+            "decision_lanes_pending": still_pending_after(lanes),
         },
     )
 

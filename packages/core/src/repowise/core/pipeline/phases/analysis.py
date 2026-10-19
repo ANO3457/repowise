@@ -399,9 +399,7 @@ async def _run_decision_extraction(
         # sources run and which of them may call a model.
         repo_cfg = load_repo_config(repo_path)
         policy = resolve_policy(repo_cfg).policy
-        enabled = policy.enabled_index_sources()
-        if only_sources is not None:
-            enabled = tuple(key for key in enabled if key in only_sources)
+        enabled = _index_sources(policy, only_sources)
         if progress:
             progress.on_phase_start("decisions", len(enabled))
 
@@ -429,30 +427,15 @@ async def _run_decision_extraction(
             timeout=DECISION_EXTRACTION_TIMEOUT_SECS,
         )
 
-        if only_sources is not None:
-            _phase_done(progress, "decisions")
-            return report
-
-        await _add_session_decisions(
-            repo_path,
-            llm_client=llm_client,
-            policy=policy,
-            report=report,
-            indexed=indexed,
-            progress=progress,
-        )
-        # After the miner: its single read is what filled the discovery span queue.
-        discovery = await _run_session_discovery(
-            repo_path, llm_client=llm_client, policy=policy, report=report, indexed=indexed
-        )
-        if progress:
-            _report_decision_sources(
-                progress,
-                report,
+        if only_sources is None:
+            await _session_passes_and_report(
+                repo_path,
+                llm_client=llm_client,
                 policy=policy,
+                report=report,
+                indexed=indexed,
                 enabled=enabled,
-                discovery=discovery,
-                provider_available=llm_client is not None,
+                progress=progress,
             )
 
         _phase_done(progress, "decisions")
@@ -462,6 +445,48 @@ async def _run_decision_extraction(
             progress.on_message("warning", f"Decision extraction skipped: {exc}")
         _phase_done(progress, "decisions")
         return None
+
+
+def _index_sources(policy: Any, only_sources: Container[str] | None) -> tuple[str, ...]:
+    """The policy's enabled index sources, narrowed to *only_sources* when given."""
+    enabled = policy.enabled_index_sources()
+    if only_sources is None:
+        return enabled
+    return tuple(key for key in enabled if key in only_sources)
+
+
+async def _session_passes_and_report(
+    repo_path: Path,
+    *,
+    llm_client: Any | None,
+    policy: Any,
+    report: Any,
+    indexed: Container[str] | None,
+    enabled: Any,
+    progress: ProgressCallback | None,
+) -> None:
+    """Session mining, broad discovery, then the per-source summary lines."""
+    await _add_session_decisions(
+        repo_path,
+        llm_client=llm_client,
+        policy=policy,
+        report=report,
+        indexed=indexed,
+        progress=progress,
+    )
+    # After the miner: its single read is what filled the discovery span queue.
+    discovery = await _run_session_discovery(
+        repo_path, llm_client=llm_client, policy=policy, report=report, indexed=indexed
+    )
+    if progress:
+        _report_decision_sources(
+            progress,
+            report,
+            policy=policy,
+            enabled=enabled,
+            discovery=discovery,
+            provider_available=llm_client is not None,
+        )
 
 
 async def _add_session_decisions(

@@ -38,6 +38,7 @@ from repowise.core.decision_lanes import set_pending_decision_lanes
 from repowise.core.docs_mode import docs_mode_state_fields, resolve_docs_mode
 from repowise.core.generation.page_selection import PageSelectionIntent
 
+from ..decision_lanes import print_lane_estimate
 from .engine import NO_DOCUMENTATION_MESSAGE, has_documentation, run_scoped_generation
 
 
@@ -122,43 +123,28 @@ def _make_gate(dry_run: bool):
         from repowise.cli.commands.init_cmd.generation import cost_gate_blocks, format_cost
         from repowise.core.cost_estimator import estimate_cost
 
-        from ..decision_lanes import print_lane_estimate
-
-        pages = sum(p.count for p in cost_plans)
-        # The gate prices pages and decision calls together; each gets its own line.
-        all_plans = [*cost_plans, decisions.cost_plan()] if decisions else list(cost_plans)
+        from ..decision_lanes import with_lane_plan
 
         if provider is None:
-            if pages:
-                est = estimate_cost(cost_plans, "none", "", repo_path=repo_path)
-                tokens = est.estimated_input_tokens + est.estimated_output_tokens
-                console.print(
-                    f"Writing [bold]{pages}[/bold] pages, about [bold]{tokens:,}[/bold] tokens."
-                )
-            if decisions:
-                print_lane_estimate(decisions, None)
-            console.print(
-                "No model is configured, so there is no price; pass "
-                "[cyan]--provider[/cyan] to price it."
-            )
+            _print_unpriced_plan(cost_plans, decisions, repo_path)
             console.print("[dim]Dry run, nothing generated.[/dim]")
             return False
 
         est = None
         try:
+            # One estimate prices pages and decision calls together.
             est = estimate_cost(
-                all_plans, provider.provider_name, provider.model_name, repo_path=repo_path
+                with_lane_plan(cost_plans, decisions),
+                provider.provider_name,
+                provider.model_name,
+                repo_path=repo_path,
             )
         except Exception as exc:
             console.print(f"[yellow]Cost estimate unavailable ({exc}).[/yellow]")
 
         if est is not None:
-            if pages:
-                console.print(
-                    f"Writing [bold]{pages}[/bold] pages with [cyan]{provider.model_name}[/cyan]."
-                )
-            if decisions:
-                print_lane_estimate(decisions, provider)
+            _print_page_line(cost_plans, f" with [cyan]{provider.model_name}[/cyan]")
+            print_lane_estimate(decisions, provider)
             console.print(f"Estimated [bold]{format_cost(est)}[/bold].")
 
         if dry_run:
@@ -388,13 +374,38 @@ def _account_for_plan(
     return counts
 
 
+def _print_page_line(cost_plans: Any, detail: str) -> None:
+    """``Writing N pages <detail>.``, or nothing on a decisions-only run."""
+    pages = sum(p.count for p in cost_plans)
+    if pages:
+        console.print(f"Writing [bold]{pages}[/bold] pages{detail}.")
+
+
+def _print_unpriced_plan(cost_plans: Any, decisions: Any, repo_path: Path) -> None:
+    """The keyless dry run: token counts for pages and decision lanes, no price."""
+    from repowise.core.cost_estimator import estimate_cost
+
+    est = estimate_cost(cost_plans, "none", "", repo_path=repo_path)
+    tokens = est.estimated_input_tokens + est.estimated_output_tokens
+    _print_page_line(cost_plans, f", about [bold]{tokens:,}[/bold] tokens")
+    print_lane_estimate(decisions, None)
+    console.print(
+        "No model is configured, so there is no price; pass [cyan]--provider[/cyan] to price it."
+    )
+
+
 def _report_outcome(outcome: Any, elapsed: float) -> None:
+    """Report the pages, or only the cost on a decisions-only run."""
+    if outcome.plan.generate_ids:
+        _report_pages(outcome, elapsed)
+    else:
+        # The lane lines already said what the decisions-only run found.
+        console.print(f"Cost: [bold]${outcome.cost_usd:.3f}[/bold] ({outcome.tokens:,} tokens).")
+
+
+def _report_pages(outcome: Any, elapsed: float) -> None:
     """Print where every planned page went, the actual cost, and what is left."""
     planned = outcome.plan.generate_ids
-    if not planned:
-        # A decisions-only run: the lane lines already said what it found.
-        console.print(f"Cost: [bold]${outcome.cost_usd:.3f}[/bold] ({outcome.tokens:,} tokens).")
-        return
     c = _account_for_plan(planned, outcome.generated_pages, outcome.swept_page_ids)
     done = c["written"] + c["unchanged"]
     unchanged = f" ({c['unchanged']} unchanged, no model call)" if c["unchanged"] else ""
