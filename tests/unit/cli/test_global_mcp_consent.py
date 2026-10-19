@@ -235,3 +235,14 @@ def test_yes_repoints_both_global_configs(home: Path, repo: Path, monkeypatch) -
         stored = json.loads(path.read_text(encoding="utf-8"))["mcpServers"]["repowise"]
         assert stored["args"][1] == _arg(repo)
     assert "now points at" in buf.getvalue()
+
+
+def test_probe_failure_never_blocks_registration(home: Path, repo: Path, monkeypatch) -> None:
+    def broken(_repo: Path) -> None:
+        raise OSError("unreadable")
+
+    monkeypatch.setattr(global_mcp, "read_global_mcp_target", broken)
+    monkeypatch.setattr(click, "confirm", _no_prompt)
+    console, buf = _console()
+    assert global_mcp.confirm_global_mcp(console, repo) is True
+    assert buf.getvalue() == ""

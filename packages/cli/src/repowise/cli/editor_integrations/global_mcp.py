@@ -9,6 +9,8 @@ place init asks.
 
 from __future__ import annotations
 
+import json
+import logging
 import os
 import sys
 from dataclasses import dataclass
@@ -18,6 +20,8 @@ from typing import Any
 import click
 
 from repowise.cli.editor_integrations import claude_config
+
+logger = logging.getLogger(__name__)
 
 NOT_SET = "not set"
 #: Re-runs the user-level writes a declined init skipped.
@@ -108,6 +112,47 @@ def read_global_mcp_target(repo_path: Path) -> GlobalMcpTarget:
     )
 
 
+def _probe(repo_path: Path) -> GlobalMcpTarget | None:
+    """The probe, or None when it fails. A failure never blocks registration."""
+    try:
+        return read_global_mcp_target(repo_path)
+    except (OSError, json.JSONDecodeError, ValueError, KeyError, TypeError) as exc:
+        logger.debug("global MCP probe failed for %s: %s", repo_path, exc)
+        return None
+
+
+def _print_command_move(console_obj: Any, target: GlobalMcpTarget) -> None:
+    if target.command_changes:
+        console_obj.print(
+            f"  [dim]Global repowise MCP entry stays on {target.new_target}; "
+            f"its command moves to {target.new_command}.[/dim]"
+        )
+
+
+def _ask_to_repoint(console_obj: Any) -> bool:
+    """Prompt, default yes. Ctrl-C or EOF declines, like init's other offers."""
+    try:
+        agreed = click.confirm("  Point it here?", default=True)
+    except (click.Abort, EOFError):
+        agreed = False
+    if not agreed:
+        console_obj.print(
+            "  [dim]Global Claude config left as is. Project files still connect "
+            f"agents opened in this repo. Run '{REGISTER_LATER_COMMAND}' to point "
+            "it here later.[/dim]"
+        )
+    return agreed
+
+
+def _repoint_consent(console_obj: Any, target: GlobalMcpTarget, *, yes: bool) -> bool:
+    """Print old and new; ask only when someone can answer."""
+    for line in target.summary_lines():
+        console_obj.print(f"  {line}")
+    if yes or not sys.stdin.isatty():
+        return True
+    return _ask_to_repoint(console_obj)
+
+
 def confirm_global_mcp(
     console_obj: Any,
     repo_path: Path,
@@ -126,32 +171,10 @@ def confirm_global_mcp(
 
     if is_editor_setup_disabled(no_editor_setup):
         return False
-    try:
-        target = read_global_mcp_target(repo_path)
-    except Exception:
-        # A probe failure must not block registration the user did not refuse.
+    target = _probe(repo_path)
+    if target is None:
         return True
-
     if not target.repoints:
-        if target.command_changes:
-            console_obj.print(
-                f"  [dim]Global repowise MCP entry stays on {target.new_target}; "
-                f"its command moves to {target.new_command}.[/dim]"
-            )
+        _print_command_move(console_obj, target)
         return True
-
-    for line in target.summary_lines():
-        console_obj.print(f"  {line}")
-    if yes or not sys.stdin.isatty():
-        return True
-    try:
-        agreed = click.confirm("  Point it here?", default=True)
-    except (click.Abort, EOFError):
-        agreed = False
-    if not agreed:
-        console_obj.print(
-            "  [dim]Global Claude config left as is. Project files still connect "
-            f"agents opened in this repo. Run '{REGISTER_LATER_COMMAND}' to point "
-            "it here later.[/dim]"
-        )
-    return agreed
+    return _repoint_consent(console_obj, target, yes=yes)
