@@ -92,8 +92,7 @@ async def get_why(
         return _stamp_answer_basis(await _why_path(query, repo))
 
     # --- Mode 3: Natural language → target-aware search ---
-    # A question naming one indexed file anchors on it, as ``targets`` would,
-    # and says so. The lookup is a hint: its failure leaves the question as asked.
+    # A named file anchors as ``targets`` would; a failed lookup anchors nothing.
     named = None
     if not targets:
         try:

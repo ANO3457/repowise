@@ -36,9 +36,8 @@ async def _git_metadata_for(session: Any, repository_id: Any, file_path: str) ->
 async def _named_file(query: str, repo: str | None) -> str | None:
     """The one indexed file a question names, by path or file name, or ``None``.
 
-    An exact path wins; a name more than one indexed file ends with anchors
-    nothing, since a wrong anchor costs more than none (ceiling: the
-    question's other words could pick one).
+    An exact path wins; the first token naming one file wins. A name several
+    files end with anchors nothing (ceiling: the question's words could pick one).
     """
     tokens = [t.replace("\\", "/").removeprefix("./") for t in path_tokens(query)]
     if not tokens:
@@ -47,7 +46,6 @@ async def _named_file(query: str, repo: str | None) -> str | None:
     spec = _get_exclude_spec(ctx.path)
     async with get_session(ctx.session_factory) as session:
         repository = await _get_repo(session)
-        # The first token that names one file wins; later ones are not read.
         for token in tokens:
             node = func.lower(GraphNode.node_id)
             low = token.lower()
