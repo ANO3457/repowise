@@ -11,7 +11,7 @@ import click
 from repowise.cli.errors import reasoned_error
 from repowise.cli.helpers import console, resolve_explicit_provider_or_prompt, run_async
 from repowise.cli.providers import resolve_embedder
-from repowise.cli.ui import OK, OWL_SPINNER, VALUE, WARN, print_index_only_intro
+from repowise.cli.ui import OK, OWL_SPINNER, VALUE, WARN
 from repowise.cli.ui.mode_names import BUILT_FROM_CODE, INDEX_ONLY, written_by
 
 from ._options import InitRun
@@ -32,19 +32,21 @@ def decision_key_in_env() -> bool:
 
 
 def announce_index_only(run: InitRun) -> None:
-    """Tell the user what a run without a model builds."""
+    """Tell the user what a run without a model builds.
+
+    An interactive run already showed it on the plan screen, so only the line
+    the screen could not know is printed there.
+    """
     fast = run.opts.run_mode == "fast"
-    if run.is_interactive:
-        print_index_only_intro(
-            console, has_provider=run.decision_provider is not None, fast=fast
-        )
-        return
-    mode = INDEX_ONLY if fast else BUILT_FROM_CODE
-    console.print(f"[bold]repowise init[/bold] · {mode} · {run.repo_path}")
-    if fast:
-        console.print("Indexing the graph and git history [dim](no documentation, no spend).[/dim]")
-    else:
-        console.print("Building documentation from code [dim](no model, no spend).[/dim]")
+    if not run.is_interactive:
+        mode = INDEX_ONLY if fast else BUILT_FROM_CODE
+        console.print(f"[bold]repowise init[/bold] · {mode} · {run.repo_path}")
+        if fast:
+            console.print(
+                "Indexing the graph and git history [dim](no documentation, no spend).[/dim]"
+            )
+        else:
+            console.print("Building documentation from code [dim](no model, no spend).[/dim]")
     if run.decision_provider:
         console.print(
             f"Decision extraction provider: [{VALUE}]{run.decision_provider.provider_name}[/]"

@@ -469,3 +469,33 @@ def test_click_prompts_are_restored_after_the_screen(plan: Any, tmp_path: Path) 
     before = (click.termui.visible_prompt_func, click.termui.hidden_prompt_func)
     plan.drive(_run(tmp_path), START)
     assert (click.termui.visible_prompt_func, click.termui.hidden_prompt_func) == before
+
+
+# -- after Enter: the plan is not repeated -------------------------------------
+
+
+def _announce(run: Any, monkeypatch: Any) -> str:
+    from repowise.cli.commands.init_cmd import _provider
+
+    console = Console(record=True, width=100, color_system=None)
+    monkeypatch.setattr(_provider, "console", console)
+    _provider.announce_index_only(run)
+    return " ".join(console.export_text().split())
+
+
+def test_after_the_plan_screen_the_forecast_is_not_repeated(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    run = _run(tmp_path, index_only=True, editor_setup=False)
+    assert _announce(run, monkeypatch) == ""
+    assert "MCP" not in _announce(run, monkeypatch)
+
+
+def test_a_run_without_the_screen_still_says_what_it_builds(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    run = _run(tmp_path, index_only=True)
+    run.is_interactive = False
+    out = _announce(run, monkeypatch)
+    assert "Built from code" in out
+    assert "no model, no spend" in out

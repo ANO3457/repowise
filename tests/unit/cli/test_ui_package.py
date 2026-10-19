@@ -34,7 +34,6 @@ def test_facade_reexports_public_surface() -> None:
         "should_offer_fast_mode",
         "print_banner",
         "print_phase_header",
-        "print_index_only_intro",
         "quick_repo_scan",
         "print_analysis_summary",
         "build_completion_panel",
