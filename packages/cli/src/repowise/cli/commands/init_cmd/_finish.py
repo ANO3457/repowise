@@ -41,6 +41,7 @@ from ._options import InitRun
 from .persistence import (
     apply_git_history_coverage_state,
     git_tier_for_run_mode,
+    keep_prior_documentation,
     persist_result,
     save_full_state_and_config,
 )
@@ -213,6 +214,7 @@ def _base_state(run: InitRun) -> dict[str, Any]:
     result = run.result
     run_mode = run.opts.run_mode
     head = get_head_commit(repo_path)
+    prior_state = load_state(repo_path)
     base_state = load_state(repo_path)
     base_state["last_sync_commit"] = head
     docs_mode = _docs_mode(run)
@@ -223,6 +225,7 @@ def _base_state(run: InitRun) -> dict[str, Any]:
     base_state["git_tier"] = git_tier_for_run_mode(run_mode)
     apply_git_history_coverage_state(base_state, result)
     _stamp_scope(run, base_state, docs_mode)
+    keep_prior_documentation(base_state, prior_state, run_mode)
     base_state["include_submodules"] = run.opts.include_submodules
     if run.phase_timings:
         base_state["phase_timings"] = run.phase_timings

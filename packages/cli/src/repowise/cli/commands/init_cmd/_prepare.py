@@ -170,6 +170,14 @@ def _confirm_wiki_overwrite(run: InitRun) -> bool:
     run.first_index = not prior_state.get("last_sync_commit")
     run.prior_docs_mode = resolve_docs_mode(prior_state)
     opts = run.opts
+    if opts.run_mode == "fast":
+        # Fast mode writes no pages, so there is nothing to overwrite.
+        if run.prior_docs_mode != "none":
+            console.print(
+                "[dim]Keeping the documentation this repo already has. "
+                "Fast mode rebuilds the index and leaves the pages as they are.[/dim]"
+            )
+        return True
     if not opts.index_only or run.prior_docs_mode != "llm" or opts.force or opts.yes:
         return True
     console.print(
