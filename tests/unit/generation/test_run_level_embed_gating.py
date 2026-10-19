@@ -57,6 +57,7 @@ def _fake_run(store) -> SimpleNamespace:
         job_id=None,
         on_page_done=None,
         on_page_ready=None,
+        on_embed=None,
         vector_store=store,
         completed_page_summaries={},
         timings=None,
@@ -124,3 +125,39 @@ def test_a_failed_embed_is_counted_on_the_generator() -> None:
 
     assert gen.embed_failed_pages == 1
     assert warnings and "Embedding failed for 1 page(s)" in warnings[0]
+
+
+def test_each_embed_batch_is_bracketed_for_the_display() -> None:
+    """Embedding is its own step on screen: start before the batch, done after."""
+    calls: list[tuple[int, bool]] = []
+
+    async def _go():
+        async def fresh():
+            return _page("fresh.py")
+
+        async def other():
+            return _page("other.py")
+
+        run = _fake_run(_RecordingStore(persists=False))
+        run.on_embed = lambda count, finished: calls.append((count, finished))
+        await _GenerationRun.run_level(run, [("p1", fresh()), ("p2", other())], level=2)
+
+    asyncio.run(_go())
+    assert calls == [(2, False), (2, True)]
+
+
+def test_a_failed_embed_batch_is_never_reported_finished() -> None:
+    calls: list[tuple[int, bool]] = []
+
+    async def _go():
+        async def fresh():
+            return _page("fresh.py")
+
+        run = _fake_run(_FailingStore())
+        run.gen = SimpleNamespace(embed_failed_pages=0)
+        run.on_warning = lambda _text: None
+        run.on_embed = lambda count, finished: calls.append((count, finished))
+        await _GenerationRun.run_level(run, [("p1", fresh())], level=2)
+
+    asyncio.run(_go())
+    assert calls == [(1, False)]

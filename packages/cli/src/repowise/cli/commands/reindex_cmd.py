@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import click
-from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 
 from repowise.cli.helpers import (
     console,
@@ -13,7 +12,7 @@ from repowise.cli.helpers import (
     run_async,
     warn,
 )
-from repowise.cli.ui import BRAND_STYLE, OWL_SPINNER
+from repowise.cli.ui import make_progress
 
 _PROVIDER_FAILURE_CIRCUIT_SLICES = 2
 _INPUT_TOO_LONG_RETRIES = 4
@@ -143,15 +142,8 @@ async def _reindex(repo_path, embedder_name: str, batch_size: int) -> None:
     consecutive_provider_failures = 0
     provider_circuit_error: Exception | None = None
 
-    with Progress(
-        SpinnerColumn(spinner_name=OWL_SPINNER, style=BRAND_STYLE),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TextColumn("{task.completed}/{task.total}"),
-        TimeElapsedColumn(),
-        console=console,
-    ) as progress:
-        task = progress.add_task("Indexing pages...", total=total)
+    with make_progress(console) as progress:
+        task = progress.add_task("Indexing pages...", total=total, unit="pages")
 
         warned = 0
 

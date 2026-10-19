@@ -14,7 +14,7 @@ import structlog
 
 from repowise.core.cost_estimator.estimator import STRUCTURAL_PAGE_TYPES
 from repowise.core.generation.models import count_stub_fallbacks
-from repowise.core.pipeline.progress import ProgressCallback
+from repowise.core.pipeline.progress import ProgressCallback, emit_item, emit_phase_failed
 
 from ._common import TEST_RUN_FILE_LIMIT, _phase_done, limit_to_top_pagerank
 
@@ -185,6 +185,37 @@ async def run_generation(
         if progress:
             progress.on_message("warning", text)
 
+    # Embedding is its own step on screen, but only when the vectors carry
+    # signal: the keyless embedder's would read as semantic search that is off.
+    from repowise.core.providers.embedding import store_has_semantic_vectors
+
+    embedding_shown = progress is not None and store_has_semantic_vectors(vector_store)
+    embedded = 0
+    # Batches started minus batches finished: a failed batch never finishes.
+    embedding_open = 0
+    embedding_started = False
+
+    def on_embed(count: int, finished: bool) -> None:
+        nonlocal embedded, embedding_open, embedding_started
+        if not embedding_shown:
+            return
+        if not finished:
+            embedding_started = True
+            embedding_open += 1
+            progress.on_phase_start("embedding", embedded + count)
+            return
+        embedding_open -= 1
+        embedded += count
+        for _ in range(count):
+            progress.on_item_done("embedding")
+
+    def page_ready(page: Any) -> None:
+        if progress is not None:
+            phase = "generation" if page.page_type in _FREE_PAGE_TYPES else "generation.llm"
+            emit_item(progress, phase, page.target_path)
+        if on_page_ready is not None:
+            on_page_ready(page)
+
     generator = PageGenerator(
         llm_client,
         assembler,
@@ -214,7 +245,7 @@ async def run_generation(
         dead_code_report=dead_code_report,
         decision_report=decision_report,
         external_systems=external_systems,
-        on_page_ready=on_page_ready,
+        on_page_ready=page_ready,
         kg_modules=kg_modules,
         kg_data=kg_data,
         only_page_ids=only_page_ids,
@@ -222,6 +253,7 @@ async def run_generation(
         timings=getattr(progress, "table", None),
         on_warning=on_warning,
         persisted_page_ids=persisted_page_ids,
+        on_embed=on_embed,
     )
     if stats_out is not None:
         stats_out["embed_failed_pages"] = generator.embed_failed_pages
@@ -275,5 +307,9 @@ async def run_generation(
     _phase_done(progress, "onboarding")
     _phase_done(progress, "generation.llm")
     _phase_done(progress, "generation")
+    if embedding_started and embedding_open == 0:
+        _phase_done(progress, "embedding")
+    elif embedding_started:
+        emit_phase_failed(progress, "embedding")
 
     return generated_pages

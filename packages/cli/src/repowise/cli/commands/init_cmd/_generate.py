@@ -8,7 +8,7 @@ from typing import Any
 from rich.table import Table
 
 from repowise.cli.helpers import console, load_config, warn
-from repowise.cli.ui import BRAND, VALUE, print_phase_header
+from repowise.cli.ui import BRAND, VALUE, print_stage
 from repowise.core.generation.styles import DEFAULT_STYLE
 
 from ._options import InitRun
@@ -107,11 +107,10 @@ def _run_deterministic_generation_phase(
 
     embedder = template_run_embedder(embedder_name_resolved, embedder_was_requested)
 
-    print_phase_header(
+    print_stage(
         console,
-        3,
+        "generation",
         total_phases,
-        "Generation",
         "Building wiki pages from the code's structure (no model, no cost)",
     )
     # Both knobs only reach a model: templates are English and unstyled, so say
@@ -155,6 +154,7 @@ def _run_deterministic_generation_phase(
         verbose=True,
         timings=timings,
         warnings=warnings,
+        total_phases=total_phases,
     )
     return embedder
 
@@ -247,11 +247,10 @@ def _run_generation_phase(
     """
     from repowise.core.generation import GenerationConfig
 
-    print_phase_header(
+    print_stage(
         console,
-        3,
+        "generation",
         total_phases,
-        "Generation",
         f"Generating wiki pages with {provider.provider_name} / {provider.model_name}",
     )
 
@@ -313,6 +312,7 @@ def _run_generation_phase(
         test_run=test_run,
         timings=timings,
         warnings=warnings,
+        total_phases=total_phases,
     )
     return False, False
 

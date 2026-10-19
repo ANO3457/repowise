@@ -24,13 +24,10 @@ from repowise.core.generation.styles import list_styles, resolve_style
 from repowise.core.reasoning import REASONING_MODES
 
 from ._finish import (
-    catch_up_savings,
     complete_setup,
     persist_index,
     raise_on_embed_failure,
     register_clients,
-    save_run_config,
-    write_run_state,
 )
 from ._generate import (
     _generate,
@@ -493,9 +490,6 @@ def init_command(**params: Any) -> None:
     # A declined cost gate or a missing provider persists like index-only.
     run.effective_index_only = run.opts.index_only or run.cost_declined or run.no_provider
     persist_index(run)
-    catch_up_savings(run.repo_path)
-    save_run_config(run)
     register_clients(run)
-    write_run_state(run)
     complete_setup(run)
     raise_on_embed_failure(run)
