@@ -67,6 +67,7 @@ from repowise.cli.ui import (
     print_banner,
 )
 from repowise.cli.ui.mode_names import pages
+from repowise.cli.ui.subscription import SubscriptionContext
 from repowise.core.docs_mode import docs_mode_state_fields
 from repowise.core.generation.styles import DEFAULT_STYLE
 
@@ -988,7 +989,7 @@ def _ask_workspace_provider(
         answers.reasoning,
         repo_path=primary_repo.path,
         save_key=save_key,
-        allow_skip=True,
+        subscription=SubscriptionContext(allow_skip=True),
     )
     if selection is None:
         answers.index_only = True

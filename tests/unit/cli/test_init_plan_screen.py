@@ -21,11 +21,13 @@ from repowise.cli.ui.plan_screen import (
     THIS_REPO,
     ModelOffer,
     PlanState,
+    RunShape,
     build_offer,
     read_plan_key,
     render_plan,
 )
 from repowise.cli.ui.repo_scanner import RepoScanInfo
+from repowise.cli.ui.subscription import SubscriptionContext
 
 _SCAN = RepoScanInfo(total_files=50, language_counts={"Python": 30}, total_commits=400)
 _OUTSIDE = ("Global repowise MCP entry (Claude Code) now points at /old, will point here: /new",)
@@ -62,7 +64,7 @@ def test_keyless_plan_is_the_free_run_with_a_visible_model_opt_in() -> None:
 
 
 def test_a_detected_key_is_named_with_cost_and_time_and_never_used_unasked() -> None:
-    offer = build_offer({"openai": "OPENAI_API_KEY"}, (), _SCAN, onboarding=True, concurrency=10)
+    offer = build_offer({"openai": "OPENAI_API_KEY"}, (), RunShape(_SCAN))
     out = _render(_state(offer=offer, model_embedder="openai"))
     assert "OPENAI_API_KEY found: openai /" in out
     assert "$" in out and "model calls" in out and "min more" in out
@@ -73,7 +75,7 @@ def test_a_detected_key_is_named_with_cost_and_time_and_never_used_unasked() -> 
 
 
 def test_a_logged_in_claude_code_is_offered_with_quota_and_time(monkeypatch: Any) -> None:
-    offer = build_offer({"claude_cli": "agent CLI"}, (), _SCAN, onboarding=True, concurrency=10)
+    offer = build_offer({"claude_cli": "agent CLI"}, (), RunShape(_SCAN))
     out = _render(_state(offer=offer))
     assert "Claude Code is logged in: claude_cli /" in out
     assert "uses your Claude Code login" in out
@@ -82,7 +84,7 @@ def test_a_logged_in_claude_code_is_offered_with_quota_and_time(monkeypatch: Any
 
 
 def test_a_chosen_model_changes_the_plan_and_the_m_key() -> None:
-    offer = build_offer({"openai": "OPENAI_API_KEY"}, (), _SCAN, onboarding=True, concurrency=10)
+    offer = build_offer({"openai": "OPENAI_API_KEY"}, (), RunShape(_SCAN))
     assert offer.price is not None
     out = _render(_state(offer=offer, chosen=offer.price, model_embedder="openai"))
     assert f"Written by {offer.price.model}" in out
@@ -158,7 +160,7 @@ def test_no_key_offers_to_continue_without_a_model(monkeypatch: Any) -> None:
     console = Console(record=True, width=100)
 
     selection = provider_selection.interactive_provider_config_select(
-        console, None, allow_skip=True
+        console, None, subscription=SubscriptionContext(allow_skip=True)
     )
 
     assert selection is None
@@ -181,7 +183,7 @@ def test_no_key_can_still_pick_another_provider(monkeypatch: Any) -> None:
     monkeypatch.setattr(provider_selection.Prompt, "ask", lambda *a, **k: next(answers))
 
     chosen = provider_selection._interactive_provider_name(
-        Console(width=100), None, allow_skip=True
+        Console(width=100), None, subscription=SubscriptionContext(allow_skip=True)
     )
 
     assert chosen == "openai"
@@ -254,7 +256,7 @@ def test_m_picks_a_model_and_enter_runs_it(
     monkeypatch.setattr(plan.module, "interactive_provider_config_select", picker)
     run = _run(tmp_path)
     plan.drive(run, MODEL, START)
-    assert seen["allow_skip"] is True
+    assert seen["subscription"].allow_skip is True
     assert seen["subscription"].model_calls > 0
     assert run.generate_docs is True
     assert run.opts.index_only is False
@@ -298,12 +300,10 @@ def test_offer_prefers_the_agent_set_up_here() -> None:
     offer = build_offer(
         {"openai": "OPENAI_API_KEY", "claude_cli": "agent CLI"},
         ("claude_cli",),
-        _SCAN,
-        onboarding=True,
-        concurrency=10,
+        RunShape(_SCAN),
     )
     assert offer.price is not None and offer.price.provider == "claude_cli"
-    assert build_offer({}, (), _SCAN, onboarding=True, concurrency=10) == ModelOffer()
+    assert build_offer({}, (), RunShape(_SCAN)) == ModelOffer()
 
 
 # -- -y help ------------------------------------------------------------------
@@ -396,7 +396,7 @@ def test_eta_never_reads_zero_minutes() -> None:
 
 
 def test_a_subscription_model_is_named_once() -> None:
-    offer = build_offer({"claude_cli": "agent CLI"}, (), _SCAN, onboarding=True, concurrency=10)
+    offer = build_offer({"claude_cli": "agent CLI"}, (), RunShape(_SCAN))
     assert offer.price is not None
     out = _render(_state(offer=offer))
     assert "claude_cli / claude_cli/" not in out
@@ -404,3 +404,25 @@ def test_a_subscription_model_is_named_once() -> None:
     chosen = _render(_state(offer=offer, chosen=offer.price))
     assert f"Written by {offer.price.model_label}" in chosen
     assert "claude_cli/" not in chosen
+
+
+def test_back_from_the_gateway_keeps_the_picker_context(monkeypatch: Any) -> None:
+    seen: list[Any] = []
+    names = iter([provider_selection._OPENAI_COMPATIBLE_CHOICE, None])
+
+    def name(*_a: Any, subscription: Any, **_k: Any) -> Any:
+        seen.append(subscription)
+        return next(names)
+
+    monkeypatch.setattr(provider_selection, "_interactive_provider_name", name)
+    monkeypatch.setattr(
+        provider_selection, "_interactive_openai_compatible_select", lambda *a, **k: None
+    )
+    context = SubscriptionContext(allow_skip=True)
+
+    selection = provider_selection.interactive_provider_config_select(
+        Console(width=100), None, subscription=context
+    )
+
+    assert selection is None
+    assert seen == [context, context]

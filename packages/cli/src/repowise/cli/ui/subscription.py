@@ -32,16 +32,19 @@ SECONDS_PER_CALL = 60
 
 @dataclass(frozen=True)
 class SubscriptionContext:
-    """What the picker needs to offer an agent CLI.
+    """What the picker knows about the run that opened it.
 
     *prefer*: agent CLIs set up in this repo, the first ready one becomes the
     default (see ``agent_providers_set_up``). *model_calls* and *concurrency*
     size the quota and time estimate; no estimate is shown without calls.
+    *allow_skip*: a provider that is not set up offers to go on without a
+    model, and the picker returns ``None`` for that answer.
     """
 
     prefer: tuple[str, ...] = ()
     model_calls: int | None = None
     concurrency: int = 10
+    allow_skip: bool = False
 
 
 def agent_cli_status(name: str) -> tuple[bool, bool]:

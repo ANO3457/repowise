@@ -69,37 +69,44 @@ class PlanState:
         return self.editor_setup and bool(self.outside)
 
 
-def _plans(scan: RepoScanInfo, onboarding: bool) -> list:
+@dataclass(frozen=True)
+class RunShape:
+    """What sizes a written run before indexing: the scan and two run options."""
+
+    scan: RepoScanInfo
+    onboarding: bool = True
+    concurrency: int = 10
+
+
+def _plans(shape: RunShape) -> list:
     from repowise.core.cost_estimator import approximate_generation_plan
 
-    return approximate_generation_plan(scan.total_files, onboarding=onboarding)
+    return approximate_generation_plan(shape.scan.total_files, onboarding=shape.onboarding)
 
 
-def model_calls_for(scan: RepoScanInfo, *, onboarding: bool) -> int:
+def model_calls_for(shape: RunShape) -> int:
     """Model calls a written run makes, from the plan the server quotes before indexing."""
     from repowise.cli.ui.subscription import model_call_count
 
-    return model_call_count(_plans(scan, onboarding)) if scan.total_files else 0
+    return model_call_count(_plans(shape)) if shape.scan.total_files else 0
 
 
-def price_model(
-    provider: str, model: str, scan: RepoScanInfo, *, onboarding: bool, concurrency: int
-) -> ModelPrice:
-    """What a written run with *provider* / *model* costs on *scan*, before indexing."""
+def price_model(provider: str, model: str, shape: RunShape) -> ModelPrice:
+    """What a written run with *provider* / *model* costs, before indexing."""
     from repowise.cli.ui.subscription import subscription_minutes, subscription_quota
     from repowise.core.cost_estimator import estimate_cost
     from repowise.core.providers.llm.specs import PROVIDER_SPECS
 
-    calls = model_calls_for(scan, onboarding=onboarding)
+    calls = model_calls_for(shape)
     spec = PROVIDER_SPECS.get(provider)
     if spec is not None and spec.agent:
         return ModelPrice(
             provider,
             model,
-            subscription_quota(provider, calls, concurrency),
-            subscription_minutes(provider, calls, concurrency),
+            subscription_quota(provider, calls, shape.concurrency),
+            subscription_minutes(provider, calls, shape.concurrency),
         )
-    est = estimate_cost(_plans(scan, onboarding), provider, model)
+    est = estimate_cost(_plans(shape), provider, model)
     rng = est.cost_range
     price = f"about ${rng.low:.2f}-${rng.high:.2f}" if rng else f"about ${est.estimated_cost_usd:.2f}"
     calls_word = "call" if calls == 1 else "calls"
@@ -123,14 +130,7 @@ def _found_phrase(provider: str, how: str) -> str:
     return f"{how} found" if how else f"{provider} is set up"
 
 
-def build_offer(
-    detected: dict[str, str],
-    prefer: tuple[str, ...],
-    scan: RepoScanInfo,
-    *,
-    onboarding: bool,
-    concurrency: int,
-) -> ModelOffer:
+def build_offer(detected: dict[str, str], prefer: tuple[str, ...], shape: RunShape) -> ModelOffer:
     """The provider ``m`` defaults to: an agent CLI set up here, else the first detected.
 
     *detected* is the picker's own detection (``provider -> how``) and
@@ -145,7 +145,7 @@ def build_offer(
     spec = PROVIDER_SPECS.get(runtime)
     model = spec.default_model if spec is not None else ""
     return ModelOffer(
-        price=price_model(runtime, model, scan, onboarding=onboarding, concurrency=concurrency),
+        price=price_model(runtime, model, shape),
         found=_found_phrase(runtime, detected[name]),
     )
 

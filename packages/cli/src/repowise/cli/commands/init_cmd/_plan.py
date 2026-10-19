@@ -23,6 +23,7 @@ from repowise.cli.ui.plan_screen import (
     THIS_REPO,
     ModelPrice,
     PlanState,
+    RunShape,
     build_offer,
     model_calls_for,
     price_model,
@@ -50,7 +51,8 @@ def _outside_lines(run: InitRun) -> tuple[str, ...]:
 
     try:
         target = read_global_mcp_target(run.repo_path)
-    except Exception:  # a probe failure never blocks the screen
+    # A probe failure never blocks the screen; JSONDecodeError is a ValueError.
+    except (OSError, ValueError, KeyError, TypeError):
         return ()
     return tuple(target.summary_lines()) if target.repoints else ()
 
@@ -87,6 +89,10 @@ def _state(run: InitRun, base: PlanState, answers: _Answers) -> PlanState:
     )
 
 
+def _shape(run: InitRun, scan: Any) -> RunShape:
+    return RunShape(scan, onboarding=run.opts.onboarding, concurrency=run.opts.concurrency)
+
+
 def _base_state(run: InitRun, scan: Any, prefer: tuple[str, ...]) -> PlanState:
     """The parts that do not change while the screen is up (detection, the probe)."""
     from repowise.cli.editor_setup import is_editor_setup_disabled
@@ -95,13 +101,7 @@ def _base_state(run: InitRun, scan: Any, prefer: tuple[str, ...]) -> PlanState:
     opts = run.opts
     editor_setup = not is_editor_setup_disabled(not opts.editor_setup)
     with console.status("  Checking for a model…"):
-        offer = build_offer(
-            _detect_provider_status(run.repo_path),
-            prefer,
-            scan,
-            onboarding=opts.onboarding,
-            concurrency=opts.concurrency,
-        )
+        offer = build_offer(_detect_provider_status(run.repo_path), prefer, _shape(run, scan))
     return PlanState(
         repo_name=run.repo_path.name or str(run.repo_path),
         scan=scan,
@@ -130,21 +130,15 @@ def _pick_model(run: InitRun, scan: Any, prefer: tuple[str, ...], answers: _Answ
         save_key=opts.save_key,
         subscription=SubscriptionContext(
             prefer=prefer,
-            model_calls=model_calls_for(scan, onboarding=opts.onboarding),
+            model_calls=model_calls_for(_shape(run, scan)),
             concurrency=opts.concurrency,
+            allow_skip=True,
         ),
-        allow_skip=True,
     )
     if selection is None:
         return
     answers.selection = selection
-    answers.chosen = price_model(
-        selection.provider_name,
-        selection.model,
-        scan,
-        onboarding=opts.onboarding,
-        concurrency=opts.concurrency,
-    )
+    answers.chosen = price_model(selection.provider_name, selection.model, _shape(run, scan))
 
 
 def _edit_plan(run: InitRun, scan: Any, editor_setup: bool, answers: _Answers) -> None:
