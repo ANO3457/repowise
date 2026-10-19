@@ -16,6 +16,7 @@ from repowise.cli.helpers import (
     console,
     get_head_commit,
     head_commit_ts,
+    load_config,
     load_state,
     run_async,
     save_config_partial,
@@ -184,6 +185,7 @@ def _stamp_scope(run: InitRun, base_state: dict[str, Any], docs_mode: str) -> No
         git_tier=git_tier_for_run_mode(run_mode),
         git_commit_cap=run.resolved_commit_limit,
         dropped_files=dropped_files_scope(getattr(result, "traversal_stats", None)),
+        test_run=run.opts.test_run and docs_mode == "llm",
         file_pages={
             "configured_cap": run.max_file_pages,
             **(
@@ -307,6 +309,19 @@ def write_run_state(run: InitRun) -> None:
             include_submodules=opts.include_submodules,
             save_key=opts.save_key,
         )
+        _stamp_test_run(run)
+
+
+def _stamp_test_run(run: InitRun) -> None:
+    """Record ``--test-run`` on the model path, which re-reads state from disk.
+
+    Stamped every run, so a whole-repo init clears an earlier sample's mark.
+    """
+    from repowise.core.index_scope import stamp_index_scope
+
+    state = load_state(run.repo_path)
+    stamp_index_scope(state, load_config(run.repo_path), test_run=run.opts.test_run)
+    save_state(run.repo_path, state, full_index=True)
 
 
 def _record_init_outcome(run: InitRun) -> None:

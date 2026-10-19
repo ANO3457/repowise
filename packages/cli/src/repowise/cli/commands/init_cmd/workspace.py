@@ -642,6 +642,7 @@ def _stamp_repo_scope(
         git_tier=state["git_tier"],
         git_commit_cap=ctx.resolved_commit_limit,
         dropped_files=dropped_files_scope(getattr(result, "traversal_stats", None)),
+        test_run=ctx.test_run and docs_mode == "llm",
         file_pages={"configured_cap": configured_cap, **_file_page_fields(result, configured_cap)},
         analysis={
             "unavailable": unavailable,
