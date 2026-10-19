@@ -86,6 +86,8 @@ class InitRun:
     resolved_commit_limit: int = 0
     resolved_follow_renames: bool = False
     embedder_name_resolved: str = ""
+    # Why that embedder: the flag, pin or env key behind it, for the run to state.
+    embedder_reason: str = ""
     embedder_was_requested: bool = False
     prior_docs_mode: str | None = None
     first_index: bool = False

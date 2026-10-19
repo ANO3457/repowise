@@ -45,7 +45,11 @@ from repowise.cli.helpers import (
     save_config_partial,
     save_state,
 )
-from repowise.cli.providers import resolve_embedder, semantic_search_status
+from repowise.cli.providers import (
+    resolve_embedder,
+    semantic_search_command,
+    semantic_search_status,
+)
 from repowise.cli.state_persistence import build_kg_state, save_knowledge_graph_json
 from repowise.cli.ui import (
     BRAND,
@@ -73,6 +77,7 @@ from .generation import (
     CostGateDeclined,
     concept_page_count,
     cost_gate_declined,
+    embedding_note,
     estimate_generation,
     format_cost,
     run_repo_generation,
@@ -127,6 +132,7 @@ def _run_workspace_generation(
         repo_path=repo_path,
         skip_tests=skip_tests,
         skip_infra=skip_infra,
+        embedder=embedder_name_resolved,
     )
 
     # Same decision and same stakes as the single-repo flow, so the count and
@@ -139,6 +145,9 @@ def _run_workspace_generation(
     structural = structural_page_summary(plans)
     if structural:
         console.print(f"    [dim]{structural}[/dim]")
+    embedding = embedding_note(est)
+    if embedding:
+        console.print(f"    [dim]{embedding}[/dim]")
 
     # Declines rather than raises when it cannot ask (see the note in init's
     # _run_generation_phase): a raise would land in the caller's generic error
@@ -614,6 +623,11 @@ def _stamp_repo_scope(
     scope_config = load_config(repo_path)
     configured_cap = resolve_max_file_pages(config=scope_config)
     scope_embedder = _scope_embedder(ctx, docs)
+    semantic = (
+        semantic_search_status(scope_embedder, getattr(result, "embed_failed_pages", 0))
+        if result.generated_pages
+        else "unavailable"
+    )
     state["run_mode"] = ctx.run_mode
     state["git_tier"] = "essential" if ctx.run_mode == "fast" else "full"
     unavailable = [] if getattr(result, "health_report", None) is not None else ["health"]
@@ -639,12 +653,12 @@ def _stamp_repo_scope(
         },
         search={
             "full_text": "available" if result.generated_pages else "unavailable",
-            "semantic": (
-                semantic_search_status(scope_embedder, getattr(result, "embed_failed_pages", 0))
-                if result.generated_pages
-                else "unavailable"
+            "semantic": semantic,
+            "next_command": (
+                semantic_search_command(repo_path, scope_embedder)
+                if result.generated_pages and semantic == "unavailable"
+                else None
             ),
-            "next_command": "repowise reindex" if result.generated_pages else None,
         },
         upgrade={
             "status": "pending" if docs_mode != "llm" else "not_applicable",

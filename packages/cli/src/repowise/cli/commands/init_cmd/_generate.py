@@ -15,6 +15,7 @@ from ._options import InitRun
 from .generation import (
     concept_page_count,
     cost_gate_declined,
+    embedding_note,
     estimate_generation,
     format_cost,
     page_type_label,
@@ -271,6 +272,7 @@ def _run_generation_phase(
         repo_path=repo_path,
         skip_tests=skip_tests,
         skip_infra=skip_infra,
+        embedder=embedder_name_resolved,
     )
 
     _print_generation_plan(est, result, provider, concurrency=concurrency, onboarding=onboarding)
@@ -291,6 +293,9 @@ def _run_generation_phase(
     structural = structural_page_summary(plans)
     if structural:
         console.print(f"  [dim]{structural}[/dim]")
+    embedding = embedding_note(est)
+    if embedding:
+        console.print(f"  [dim]{embedding}[/dim]")
     if cost_gate_declined(est, yes=yes, message="  Continue?"):
         console.print("  Skipping the model. [dim]Building the wiki from structure instead.[/dim]")
         console.print(

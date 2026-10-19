@@ -143,7 +143,7 @@ def _docs_mode(run: InitRun) -> str:
 
 
 def _stamp_scope(run: InitRun, base_state: dict[str, Any], docs_mode: str) -> None:
-    from repowise.cli.providers import semantic_search_status
+    from repowise.cli.providers import semantic_search_command, semantic_search_status
     from repowise.core.generation.selection import count_documentable_files
     from repowise.core.index_scope import dropped_files_scope, file_page_scope, stamp_index_scope
 
@@ -155,6 +155,11 @@ def _stamp_scope(run: InitRun, base_state: dict[str, Any], docs_mode: str) -> No
     if getattr(result, "health_report", None) is None:
         unavailable.append("health")
     skipped = ["generation"] if run_mode == "fast" else []
+    semantic = (
+        semantic_search_status(scope_embedder, getattr(result, "embed_failed_pages", 0))
+        if result.generated_pages
+        else "unavailable"
+    )
     stamp_index_scope(
         base_state,
         {"commit_limit": run.resolved_commit_limit, "max_file_pages": run.max_file_pages},
@@ -187,12 +192,13 @@ def _stamp_scope(run: InitRun, base_state: dict[str, Any], docs_mode: str) -> No
         },
         search={
             "full_text": "available" if result.generated_pages else "unavailable",
-            "semantic": (
-                semantic_search_status(scope_embedder, getattr(result, "embed_failed_pages", 0))
-                if result.generated_pages
-                else "unavailable"
+            "semantic": semantic,
+            # Fast mode has no pages for reindex to embed.
+            "next_command": (
+                semantic_search_command(run.repo_path, scope_embedder)
+                if result.generated_pages and semantic == "unavailable"
+                else None
             ),
-            "next_command": "repowise reindex" if result.generated_pages else None,
         },
         upgrade={
             "status": "pending" if docs_mode != "llm" else "not_applicable",
