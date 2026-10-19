@@ -87,7 +87,11 @@ from .generation import (
     run_repo_generation,
     structural_page_summary,
 )
-from .persistence import apply_git_history_coverage_state, persist_result
+from .persistence import (
+    apply_git_history_coverage_state,
+    keep_prior_documentation,
+    persist_result,
+)
 from .reporting import show_workspace_completion
 
 
@@ -614,6 +618,7 @@ def _repo_state(
         state["phase_timings"] = repo_phase_timings
     apply_git_history_coverage_state(state, result)
     _stamp_repo_scope(state, repo_path, ctx, index, docs)
+    keep_prior_documentation(state, load_state(repo_path), ctx.run_mode)
     kg = getattr(result, "knowledge_graph_result", None)
     if kg is not None:
         state["knowledge_graph"] = build_kg_state(kg)
