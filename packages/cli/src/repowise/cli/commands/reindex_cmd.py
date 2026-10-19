@@ -58,46 +58,10 @@ async def _reindex(repo_path, embedder_name: str, batch_size: int) -> None:
     from sqlalchemy import select
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-    from repowise.cli.providers.embedders import build_embedder, semantic_search_setup_hint
     from repowise.core.persistence.database import create_engine, init_db
     from repowise.core.persistence.models import Page
-    from repowise.core.providers.embedding.base import MockEmbedder
-    from repowise.core.providers.embedding.resolve import (
-        embedder_reason,
-        resolve_reindex_embedder,
-    )
 
-    # --- Resolve embedder ---
-    reason = "--embedder"
-    if embedder_name == "auto":
-        # Through the repo, not only the environment: the pin names the backend
-        # that wrote the table, so a key for another provider must not rewrite
-        # it. A mock pin is the exception (see resolve_reindex_embedder).
-        embedder_name, source = resolve_reindex_embedder(repo_path)
-        reason = embedder_reason(embedder_name, source, repo_path=repo_path)
-        # Mock vectors carry no meaning, so rebuilding them adds nothing. Only
-        # an explicit REPOWISE_EMBEDDER=mock (or the flag) still means mock.
-        if embedder_name == "mock" and source in ("config.yaml", "default"):
-            console.print(
-                "[yellow]No embedder found, so semantic search stays off.[/yellow] "
-                f"{semantic_search_setup_hint()}"
-            )
-            raise click.exceptions.Exit(1)
-
-    embedder_impl = build_embedder(embedder_name, repo_path)
-    # A named backend that could not be built fell back to mock: an error, not
-    # a run to finish with test vectors.
-    if isinstance(embedder_impl, MockEmbedder) and embedder_name != "mock":
-        console.print(
-            "[red]No real embedder available. Set a real embedder key, configure Ollama, or pass --embedder mock for test vectors.[/red]"
-        )
-        raise click.Abort()
-    if embedder_name == "mock":
-        console.print(
-            f"Embedder: [yellow]mock[/yellow] ({reason}). Test vectors, no semantic search."
-        )
-    else:
-        console.print(f"Embedder: [green]{embedder_name}[/green] ({reason}).")
+    embedder_name, embedder_impl = _embedder_for(repo_path, embedder_name)
 
     # --- Create LanceDB vector store ---
     lance_dir = Path(repo_path) / ".repowise" / "lancedb"
@@ -333,6 +297,48 @@ async def _reindex(repo_path, embedder_name: str, batch_size: int) -> None:
     # failure is visible in the exit status, not just in the printed count.
     if indexed == 0 and failed > 0:
         raise click.Abort()
+
+
+def _embedder_for(repo_path, embedder_name: str) -> tuple[str, object]:
+    """Resolve, build and announce the embedder; exit when auto finds none."""
+    from repowise.cli.providers.embedders import build_embedder, semantic_search_setup_hint
+    from repowise.core.providers.embedding.base import MockEmbedder
+    from repowise.core.providers.embedding.resolve import (
+        embedder_reason,
+        resolve_reindex_embedder,
+    )
+
+    reason = "--embedder"
+    if embedder_name == "auto":
+        # Through the repo, not only the environment: the pin names the backend
+        # that wrote the table, so a key for another provider must not rewrite
+        # it. A mock pin is the exception (see resolve_reindex_embedder).
+        embedder_name, source = resolve_reindex_embedder(repo_path)
+        reason = embedder_reason(embedder_name, source, repo_path=repo_path)
+        # Mock vectors carry no meaning, so rebuilding them adds nothing. Only
+        # an explicit REPOWISE_EMBEDDER=mock (or the flag) still means mock.
+        if embedder_name == "mock" and source in ("config.yaml", "default"):
+            console.print(
+                "[yellow]No embedder found, so semantic search stays off.[/yellow] "
+                f"{semantic_search_setup_hint()}"
+            )
+            raise click.exceptions.Exit(1)
+
+    embedder_impl = build_embedder(embedder_name, repo_path)
+    # A named backend that could not be built fell back to mock: an error, not
+    # a run to finish with test vectors.
+    if isinstance(embedder_impl, MockEmbedder) and embedder_name != "mock":
+        console.print(
+            "[red]No real embedder available. Set a real embedder key, configure Ollama, or pass --embedder mock for test vectors.[/red]"
+        )
+        raise click.Abort()
+    if embedder_name == "mock":
+        console.print(
+            f"Embedder: [yellow]mock[/yellow] ({reason}). Test vectors, no semantic search."
+        )
+    else:
+        console.print(f"Embedder: [green]{embedder_name}[/green] ({reason}).")
+    return embedder_name, embedder_impl
 
 
 def _batch_recovery_plan(
