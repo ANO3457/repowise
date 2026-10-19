@@ -45,9 +45,9 @@ class HotspotFile:
     # Bug-fix history for the same file. ``fix_count`` is the windowed
     # production-code fix count (``GitMetadata.prior_defect_count``), and
     # ``last_fix_date`` (``YYYY-MM-DD``) anchors it, because a count with no
-    # recency reads as an accusation about 2019. A date rather than an age: the
-    # file is not regenerated daily, so "yesterday" goes stale. ``bug_magnet`` is
-    # only ever set alongside a date, per the recency contract in ``types/health.ts``.
+    # recency reads as an accusation about 2019; a date stays true between
+    # regenerations. ``bug_magnet`` is only ever set alongside a date, per the
+    # recency contract in ``types/health.ts``.
     fix_count: int = 0
     bug_magnet: bool = False
     last_fix_date: str | None = None

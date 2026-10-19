@@ -196,7 +196,7 @@ LIMIT 5
 SELECT * FROM decision_records
 WHERE repository_id = :repo_id AND status = 'active'
 ORDER BY staleness_score ASC
-LIMIT 3   -- titles only; over-fetched to drop records in excluded paths
+LIMIT 9   -- 3 shown, titles only; the spare rows cover records in excluded paths
 ```
 
 **Average confidence** (`_get_avg_confidence`)

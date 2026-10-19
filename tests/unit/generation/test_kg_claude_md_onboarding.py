@@ -114,11 +114,12 @@ class TestClaudeMdKGSection:
         hot = HotspotFile(path="src/a.py", churn_percentile=99.0, commit_count_90d=3, owner=None)
         rendered = tmpl.render(data=self._data(entry_points=["src/main.py"], hotspots=[hot]))
         assert "### How to work in this repo" in rendered
-        # The load-bearing trust clause stays; the rest of the old bullet is
-        # carried by the responses themselves (`_meta` hints, `*_basis` notes).
+        # The load-bearing trust and basis clauses stay; the rest of the old
+        # bullets ride in the responses themselves (`_meta` hints, stale warnings).
         assert "`verified: true` need no re-read" in rendered
         assert '`bounds: "approximate"`' in rendered
-        assert "`*_basis`" not in rendered
+        assert "`*_basis`" in rendered
+        assert "never re-read them" not in rendered
         # Pre-edit framing: the mandatory Read of edit targets is conceded.
         assert "raw Read of any file you will Edit" in rendered
         # The tool table renders from the single-source module.

@@ -29,8 +29,6 @@ DEFAULT_SECTIONS: frozenset[str] = frozenset(
     }
 )
 
-#: Off by default. ``code_health`` and ``how_to_work_full`` replace their lean
-#: counterparts when listed; ``fix_first`` adds the Fix-first queue.
 OPT_IN_SECTIONS: frozenset[str] = frozenset(
     {"code_health", "fix_first", "commands", "how_to_work_full"}
 )
@@ -48,7 +46,7 @@ def resolve_sections(raw: object) -> frozenset[str]:
         return DEFAULT_SECTIONS
     if isinstance(raw, str):
         raw = [raw]
-    if not isinstance(raw, Iterable):
+    if isinstance(raw, dict) or not isinstance(raw, Iterable):
         log.warning("editor_files.sections ignored: expected a list of names", value=raw)
         return DEFAULT_SECTIONS
     explicit: set[str] = set()
@@ -56,11 +54,12 @@ def resolve_sections(raw: object) -> frozenset[str]:
     removed: set[str] = set()
     for name in raw:
         token = str(name).strip().lower()
-        key = token.lstrip("+-")
+        prefix = token[:1] if token[:1] in ("+", "-") else ""
+        key = token[len(prefix) :]
         if key not in ALL_SECTIONS:
             log.warning("editor_files.sections: unknown section", section=name)
             continue
-        {"+": added, "-": removed}.get(token[:1], explicit).add(key)
+        {"+": added, "-": removed}.get(prefix, explicit).add(key)
     base = explicit if explicit else set(DEFAULT_SECTIONS)
     return frozenset((base | added) - removed)
 

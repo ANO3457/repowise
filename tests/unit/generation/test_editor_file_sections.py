@@ -35,6 +35,11 @@ def test_the_list_replaces_the_default():
     assert resolve_sections(["hotspots", "Tools"]) == {"hotspots", "tools"}
 
 
+def test_only_one_prefix_is_read():
+    assert resolve_sections(["--architecture"]) == DEFAULT_SECTIONS
+    assert resolve_sections({"commands": True}) == DEFAULT_SECTIONS
+
+
 def test_unknown_names_are_dropped():
     assert resolve_sections(["hotspots", "nonsense"]) == {"hotspots"}
 

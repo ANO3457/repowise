@@ -1151,7 +1151,7 @@ filter rules in `core/generation/editor_files/data.py`:
 
 Everything else is filtered out so the CLAUDE.md doesn't drown a fresh
 agent in noise. The Jinja stanza lives in
-`core/generation/templates/claude_md.j2`.
+`core/generation/templates/_editor_block.j2`.
 
 ---
 
