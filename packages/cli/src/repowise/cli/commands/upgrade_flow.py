@@ -533,29 +533,13 @@ async def _generate_upgrade_pages(
     ``inputs`` is (parsed_files, source_map, graph_builder, repo_structure,
     git_meta_map).
     """
-    from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
-
     from repowise.cli.commands.init_cmd._generation_persist import (
         run_generation_with_persistence,
     )
-    from repowise.cli.ui import (
-        BRAND_STYLE,
-        OK,
-        OWL_SPINNER,
-        MaybeCountColumn,
-        RichProgressCallback,
-    )
+    from repowise.cli.ui import RichProgressCallback, make_progress
 
     parsed_files, source_map, graph_builder, repo_structure, git_meta_map = inputs
-    with Progress(
-        SpinnerColumn(spinner_name=OWL_SPINNER, style=BRAND_STYLE),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        MaybeCountColumn(),
-        TimeElapsedColumn(),
-        TextColumn(f"[{OK}]${{task.fields[cost]:.3f}}[/]"),
-        console=console,
-    ) as upgrade_progress:
+    with make_progress(console, cost=True) as upgrade_progress:
         gen_callback = RichProgressCallback(upgrade_progress, console)
         return await run_generation_with_persistence(
             repo_path=repo_path,

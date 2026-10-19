@@ -18,7 +18,7 @@ from typing import Any
 
 import structlog
 
-from repowise.core.pipeline.progress import ProgressCallback, emit_warning
+from repowise.core.pipeline.progress import ProgressCallback, emit_item, emit_warning
 
 from ._common import _phase_done
 
@@ -320,6 +320,9 @@ def _parse_one(path_and_fi_and_bytes: tuple) -> Any:
     try:
         if _WORKER_PARSER is None:
             from repowise.core.ingestion import ASTParser
+            from repowise.core.worker_logging import quiet_worker_logs
+
+            quiet_worker_logs()
 
             _WORKER_PARSER = ASTParser()
         return _WORKER_PARSER.parse_file(fi, source)
@@ -508,9 +511,16 @@ async def _parse_in_pool(
         # until the last file is done, which on large repos looked like a hang
         # at ``0/N``. Done-callbacks keep gather's ordered results intact.
         if progress is not None:
-            _parse_tick = lambda _fut: progress.on_item_done("parse")  # noqa: E731
-            for fut in tasks:
-                fut.add_done_callback(_parse_tick)
+
+            def _parse_tick(path: str) -> Any:
+                def _tick(_fut: Any) -> None:
+                    progress.on_item_done("parse")
+                    emit_item(progress, "parse", path)
+
+                return _tick
+
+            for fut, (_idx, (fi, _src), _h) in zip(tasks, to_parse, strict=True):
+                fut.add_done_callback(_parse_tick(fi.path))
         return await asyncio.gather(*tasks, return_exceptions=True)
 
 
@@ -527,6 +537,7 @@ async def _parse_in_process(to_parse: list[tuple], progress: ProgressCallback | 
             parse_results.append((fi.abs_path, str(exc)))
         if progress:
             progress.on_item_done("parse")
+            emit_item(progress, "parse", fi.path)
         if i % 50 == 49:
             await asyncio.sleep(0)
     return parse_results
@@ -705,7 +716,7 @@ async def _build_graph(
         # because on a small repo the build is over in under a second.
         progress.on_message(
             "notice",
-            "Graph build can take several minutes on a first run. Safe to Ctrl-C — "
+            "Graph build can take several minutes on a first run. Safe to Ctrl-C: "
             "re-run 'repowise init --resume' to continue where it stopped.",
         )
     await asyncio.to_thread(graph_builder.build, progress)

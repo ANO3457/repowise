@@ -27,13 +27,10 @@ from repowise.core.update_lock import init_in_progress
 
 from ._exit import exit_interrupted
 from ._finish import (
-    catch_up_savings,
     complete_setup,
     exit_with_gaps,
     persist_index,
     register_clients,
-    save_run_config,
-    write_run_state,
 )
 from ._generate import (
     _generate,
@@ -517,9 +514,6 @@ def _run_single_repo(opts: InitOptions, repo_path: Any, start: float) -> None:
     # A declined cost gate or a missing provider persists like index-only.
     run.effective_index_only = run.opts.index_only or run.cost_declined or run.no_provider
     persist_index(run)
-    catch_up_savings(run.repo_path)
-    save_run_config(run)
     register_clients(run)
-    write_run_state(run)
     complete_setup(run)
     exit_with_gaps(run)

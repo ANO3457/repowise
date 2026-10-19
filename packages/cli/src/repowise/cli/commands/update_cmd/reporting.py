@@ -14,13 +14,9 @@ import sys
 from typing import Any
 
 import click
-from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 
 from repowise.cli.helpers import console
 from repowise.cli.ui import (
-    BRAND_STYLE,
-    OWL_SPINNER,
-    MaybeCountColumn,
     build_completion_panel,
     format_elapsed,
 )
@@ -108,21 +104,6 @@ def render_cascade_budget_warning(
     else:
         console.print(f"  Pass `{full}` to regenerate them in this run.")
     console.print()
-
-
-def make_generation_progress() -> Progress:
-    """Build the live page-generation progress bar (owl spinner + running cost),
-    matching the columns ``init`` uses for its generation phase.
-    """
-    return Progress(
-        SpinnerColumn(spinner_name=OWL_SPINNER, style=BRAND_STYLE),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        MaybeCountColumn(),
-        TimeElapsedColumn(),
-        TextColumn("[green]${task.fields[cost]:.3f}[/green]"),
-        console=console,
-    )
 
 
 # ---------------------------------------------------------------------------
