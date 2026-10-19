@@ -49,14 +49,15 @@ def _stored_mode(repo_path: Path) -> dict[str, Any] | None:
     """The mode state.json records, or None when this repo has no index yet."""
     from repowise.core.index_scope import resolve_index_scope
 
-    # Runs inside the exit handlers: a corrupt state or config must not cost the summary.
+    # Runs inside the exit handlers: an unreadable state.json must not cost the
+    # summary. load_config already degrades a broken config to {}.
     try:
         state = load_state(repo_path)
-        if not state.get("index_scope"):
-            return None
-        return mode_of(resolve_index_scope(state, load_config(repo_path)))
-    except Exception:
+    except (OSError, ValueError):
         return None
+    if not isinstance(state, dict) or not state.get("index_scope"):
+        return None
+    return mode_of(resolve_index_scope(state, load_config(repo_path)))
 
 
 def _relative(repo_path: Path, paths: list[Path]) -> list[str]:
@@ -69,32 +70,41 @@ def _relative(repo_path: Path, paths: list[Path]) -> list[str]:
     return out
 
 
-def run_summary(run: InitRun, gaps: list[str]) -> dict[str, Any]:
-    """The summary of a run that finished: ready, or degraded by *gaps*."""
-    result = run.result
+def _restart_required(run: InitRun) -> bool:
+    """Whether the editor must restart (or run /mcp) to load the tools, as the panel says."""
+    setup = run.setup_outcome
+    if setup is None or setup.editor_setup_disabled or not setup.claude_code_connected:
+        return False
+    return bool(setup.first_index or run.mcp_repointed)
+
+
+def _spend(result: Any) -> dict[str, Any]:
     pages = getattr(result, "generated_pages", None) or []
     cost = getattr(result, "llm_cost_usd", None)
-    setup = run.setup_outcome
-    restart = bool(
-        setup is not None
-        and not setup.editor_setup_disabled
-        and setup.claude_code_connected
-        and (setup.first_index or run.mcp_repointed)
-    )
-    next_commands = [command for command, _gloss in run.next_steps]
-    if SERVE_COMMAND not in next_commands:
-        next_commands.insert(0, SERVE_COMMAND)
+    return {
+        "tokens": sum(getattr(p, "total_tokens", 0) or 0 for p in pages),
+        "usd": round(cost or 0.0, 4),
+    }
+
+
+def _next_commands(run: InitRun) -> list[str]:
+    """The panel's next steps, ``repowise serve`` first."""
+    commands = [command for command, _gloss in run.next_steps]
+    if SERVE_COMMAND not in commands:
+        commands.insert(0, SERVE_COMMAND)
+    return commands
+
+
+def run_summary(run: InitRun, gaps: list[str]) -> dict[str, Any]:
+    """The summary of a run that finished: ready, or degraded by *gaps*."""
     return agent_events.summary_fields(
         agent_events.STATUS_DEGRADED if gaps else agent_events.STATUS_READY,
         mode=_stored_mode(run.repo_path),
-        restart_required=restart,
-        spend={
-            "tokens": sum(getattr(p, "total_tokens", 0) or 0 for p in pages),
-            "usd": round(cost or 0.0, 4),
-        },
+        restart_required=_restart_required(run),
+        spend=_spend(run.result),
         warnings=[*run.run_warnings, *gaps],
         files_written=_relative(run.repo_path, run.files_written),
-        next_commands=next_commands,
+        next_commands=_next_commands(run),
     )
 
 

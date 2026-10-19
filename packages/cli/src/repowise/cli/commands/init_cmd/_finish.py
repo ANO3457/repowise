@@ -114,15 +114,14 @@ def register_clients(run: InitRun) -> None:
 
 
 def _mcp_entry_moves(repo_path: Path) -> bool:
-    """Whether registering repoints an existing global repowise MCP entry. Read-only."""
-    try:
-        from repowise.cli.editor_integrations.claude_config import (
-            describe_mcp_registration_change,
-        )
+    """Whether registering repoints an existing global repowise MCP entry. Read-only.
 
-        return describe_mcp_registration_change(repo_path) is not None
-    except Exception:
-        return False
+    Unguarded: the probe already treats an unreadable config as absent, and
+    registration runs the same probe unguarded right after.
+    """
+    from repowise.cli.editor_integrations.claude_config import describe_mcp_registration_change
+
+    return describe_mcp_registration_change(repo_path) is not None
 
 
 def _docs_mode(run: InitRun) -> str:
