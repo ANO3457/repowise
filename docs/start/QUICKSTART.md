@@ -71,7 +71,7 @@ Node.js 20+, and its first run downloads the UI (about 50 MB, cached in
 | What | Where | When |
 |---|---|---|
 | MCP server entry | `.mcp.json`, `.vscode/mcp.json` (plus `.vscode/extensions.json`) | by default |
-| Agent context files | `.claude/CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.md` | by default |
+| Agent context files | `.claude/CLAUDE.md`, `AGENTS.md`, Copilot instructions under `.github/` | by default |
 | Global repowise MCP entry for Claude Code and Claude Desktop | `~/.claude/settings.json` and the Claude Desktop config | asked first when it points at another repo (default yes); `--yes` points it here and prints the old and new repo |
 | Claude Code hooks (session briefing, post-edit context) | `~/.claude/settings.json` | with the global entry |
 | Post-commit hook that runs `repowise update` | the repo's git `post-commit` hook | asked first; on under `--yes` (`--no-hook` skips it) |
