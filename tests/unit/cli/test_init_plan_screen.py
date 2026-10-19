@@ -324,3 +324,15 @@ def test_yes_help_says_everything_it_skips() -> None:
         "distill rewrite hook is not",
     ):
         assert phrase in flat, phrase
+
+
+def test_eof_after_a_key_restores_the_run(plan: Any, tmp_path: Path, monkeypatch: Any) -> None:
+    def picker(*_a: Any, **_k: Any) -> Any:
+        raise EOFError
+
+    monkeypatch.setattr(plan.module, "interactive_provider_config_select", picker)
+    run = _run(tmp_path, run_mode="fast")
+    opts = run.opts
+    plan.drive(run, MODEL)
+    assert run.opts is opts
+    assert run.is_interactive is False

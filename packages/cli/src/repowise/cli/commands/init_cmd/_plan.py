@@ -210,6 +210,8 @@ def run_plan_screen(run: InitRun, scan: Any) -> None:
     prefer = agent_providers_set_up(run.repo_path)
     base = _base_state(run, scan, prefer)
     answers = _Answers(sync=run.opts.hook if run.opts.hook is not None else True)
+    # Restored on EOF, so the defaults path never runs half an answer.
+    before = (run.opts, run.generate_docs, run.editor_options)
     try:
         while True:
             state = _state(run, base, answers)
@@ -228,6 +230,7 @@ def run_plan_screen(run: InitRun, scan: Any) -> None:
             else:
                 break
     except EOFError:
+        run.opts, run.generate_docs, run.editor_options = before
         run.is_interactive = False
         console.print(
             f"\n[{WARN}]No answer available on stdin[/] "
