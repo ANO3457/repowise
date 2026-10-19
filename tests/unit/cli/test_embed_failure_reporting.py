@@ -156,8 +156,8 @@ def _closing_card(tmp_path: Path, monkeypatch, *, semantic: str, failed: int) ->
         Console(file=buf, width=200, force_terminal=False),
     )
     monkeypatch.setattr(
-        "repowise.cli.commands.init_cmd.reporting.build_completion_panel",
-        lambda title, metrics, next_steps=None: "PANEL",
+        "repowise.cli.commands.init_cmd.reporting.print_completion_panel",
+        lambda console, title, metrics, next_steps=None: console.print("PANEL"),
     )
     graph = MagicMock()
     graph.number_of_nodes.return_value = 1

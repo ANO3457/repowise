@@ -39,8 +39,7 @@ from repowise.cli.ui import (
     OK,
     OWL_SPINNER,
     WARN,
-    RichProgressCallback,
-    make_progress,
+    progress_steps,
 )
 from repowise.core.generation.models import (
     STUB_FALLBACK_ERROR,
@@ -295,10 +294,8 @@ def run_repo_generation(
     vector_store: Any = getattr(result, "vector_store", None)
     if vector_store is None and verbose:
         # Opening the store can take seconds on a large index; say so.
-        with make_progress(console) as store_bar:
-            steps = RichProgressCallback(store_bar, console)
-            with steps.step("vector_store"):
-                vector_store = build_vector_store(repo_path, embedder_impl)
+        with progress_steps(console) as steps, steps.step("vector_store"):
+            vector_store = build_vector_store(repo_path, embedder_impl)
     elif vector_store is None:
         vector_store = build_vector_store(repo_path, embedder_impl)
     result.vector_store = vector_store
@@ -339,14 +336,13 @@ def run_repo_generation(
     # ``total_phases`` comes only from single-repo init, whose resume this is.
     from ._ingest import RESUME_COMMAND
 
-    with make_progress(
+    with progress_steps(
         console,
         cost=not deterministic,
         resume_command=RESUME_COMMAND if total_phases is not None else None,
-    ) as gen_progress:
-        gen_callback: Any = RichProgressCallback(
-            gen_progress, console, total_phases=total_phases, stage="generation"
-        )
+        total_phases=total_phases,
+        stage="generation",
+    ) as gen_callback:
         if timings is not None:
             gen_callback = PhaseTimingRecorder(gen_callback, timings)
         generated_pages = run_async(

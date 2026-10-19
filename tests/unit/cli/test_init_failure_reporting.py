@@ -246,12 +246,11 @@ def test_show_completion_panel_with_failures(monkeypatch):
     """show_completion reflects failed count in metric line when failures exist."""
     printed_panels = []
 
-    def mock_completion_panel(title, metrics, next_steps=None):
+    def mock_completion_panel(console, title, metrics, next_steps=None):
         printed_panels.append(metrics)
-        return "PANEL"
 
     monkeypatch.setattr(
-        "repowise.cli.commands.init_cmd.reporting.build_completion_panel", mock_completion_panel
+        "repowise.cli.commands.init_cmd.reporting.print_completion_panel", mock_completion_panel
     )
     monkeypatch.setattr(
         "repowise.cli.commands.init_cmd.reporting.console.print", lambda *a, **kw: None
@@ -331,8 +330,8 @@ class TestInitRendersGenerationChecks:
             Console(file=buf, width=200, force_terminal=False),
         )
         monkeypatch.setattr(
-            "repowise.cli.commands.init_cmd.reporting.build_completion_panel",
-            lambda title, metrics, next_steps=None: "PANEL",
+            "repowise.cli.commands.init_cmd.reporting.print_completion_panel",
+            lambda console, title, metrics, next_steps=None: console.print("PANEL"),
         )
         show_completion(
             repo_path="/fake",
@@ -471,8 +470,8 @@ def test_completion_panel_excludes_placeholders_from_the_page_count(monkeypatch)
     """The panel derives the same split from the same helper, not its own count."""
     printed_panels = []
     monkeypatch.setattr(
-        "repowise.cli.commands.init_cmd.reporting.build_completion_panel",
-        lambda title, metrics, next_steps=None: printed_panels.append(metrics) or "PANEL",
+        "repowise.cli.commands.init_cmd.reporting.print_completion_panel",
+        lambda console, title, metrics, next_steps=None: printed_panels.append(metrics),
     )
     monkeypatch.setattr(
         "repowise.cli.commands.init_cmd.reporting.console.print", lambda *a, **kw: None
@@ -568,8 +567,8 @@ class TestInitClosingKeylessNote:
             Console(file=buf, width=200, force_terminal=False),
         )
         monkeypatch.setattr(
-            "repowise.cli.commands.init_cmd.reporting.build_completion_panel",
-            lambda title, metrics, next_steps=None: "PANEL",
+            "repowise.cli.commands.init_cmd.reporting.print_completion_panel",
+            lambda console, title, metrics, next_steps=None: console.print("PANEL"),
         )
         monkeypatch.setattr(
             "repowise.cli.commands.init_cmd.reporting.load_state",
