@@ -15,13 +15,13 @@ from repowise.cli.helpers import console, load_config, load_state
 from repowise.cli.ui import (
     OK,
     WARN,
-    build_completion_panel,
     build_contextual_next_steps,
     format_elapsed,
     mascot,
     print_analysis_summary,
+    print_completion_panel,
 )
-from repowise.cli.ui.finish_panel import FinishFacts, build_finish_panel
+from repowise.cli.ui.finish_panel import FinishFacts, print_finish_panel
 from repowise.cli.ui.glyphs import glyph
 from repowise.cli.ui.mode_names import TITLE_WORKSPACE, pages
 from repowise.cli.ui.result_panels import serve_step
@@ -147,8 +147,8 @@ def show_completion(
     files_written: list[Path] | None = None,
     verbose: bool = False,
     owl: str = mascot.DONE,
-) -> None:
-    """Render the one finish panel; the generation checks only under ``-v``.
+) -> list[tuple[str, str]]:
+    """Render the one finish panel and return its next steps; generation checks only under ``-v``.
 
     *owl* is the mini owl state on the panel title: how the run finished.
 
@@ -196,15 +196,14 @@ def show_completion(
         setup=setup,
     )
     console.print()
-    console.print(
-        build_finish_panel(
-            facts,
-            steps=steps,
-            setup=setup,
-            repo_path=Path(repo_path),
-            files_written=files_written,
-            owl=owl,
-        )
+    print_finish_panel(
+        console,
+        facts,
+        steps=steps,
+        setup=setup,
+        repo_path=Path(repo_path),
+        files_written=files_written,
+        owl=owl,
     )
     console.print()
     _render_defect_accuracy(result)
@@ -217,6 +216,7 @@ def show_completion(
 
     if verbose:
         _show_generation_checks(result)
+    return steps
 
 
 def _top_hotspot(result: Any) -> str:
@@ -321,13 +321,12 @@ def show_workspace_completion(
     next_steps = _workspace_next_steps(run_mode, index_only or provider is None)
 
     console.print()
-    console.print(
-        build_completion_panel(
-            TITLE_WORKSPACE,
-            metrics,
-            next_steps=next_steps,
-            owl=mascot.WARNED if errors else mascot.DONE,
-        )
+    print_completion_panel(
+        console,
+        TITLE_WORKSPACE,
+        metrics,
+        next_steps,
+        owl=mascot.WARNED if errors else mascot.DONE,
     )
     console.print()
 

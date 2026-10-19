@@ -247,11 +247,12 @@ def test_show_completion_panel_with_failures(monkeypatch):
     """show_completion reflects failed count in metric line when failures exist."""
     printed_panels = []
 
-    def mock_completion_panel(title, metrics, **_kw):
+    def mock_completion_panel(console, title, metrics, next_steps=None, **_kw):
         printed_panels.append(metrics)
-        return "PANEL"
 
-    monkeypatch.setattr("repowise.cli.ui.finish_panel.build_completion_panel", mock_completion_panel)
+    monkeypatch.setattr(
+        "repowise.cli.ui.finish_panel.print_completion_panel", mock_completion_panel
+    )
     monkeypatch.setattr(
         "repowise.cli.commands.init_cmd.reporting.console.print", lambda *a, **kw: None
     )
@@ -473,8 +474,8 @@ def test_completion_panel_excludes_placeholders_from_the_page_count(monkeypatch)
     """The panel derives the same split from the same helper, not its own count."""
     printed_panels = []
     monkeypatch.setattr(
-        "repowise.cli.ui.finish_panel.build_completion_panel",
-        lambda title, metrics, **_kw: printed_panels.append(metrics) or "PANEL",
+        "repowise.cli.ui.finish_panel.print_completion_panel",
+        lambda console, title, metrics, next_steps=None, **_kw: printed_panels.append(metrics),
     )
     monkeypatch.setattr(
         "repowise.cli.commands.init_cmd.reporting.console.print", lambda *a, **kw: None

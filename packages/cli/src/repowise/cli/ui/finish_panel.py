@@ -19,7 +19,7 @@ from rich.text import Text
 from repowise.cli.ui import mascot
 from repowise.cli.ui.brand import BRAND, WARN, key_value_table
 from repowise.cli.ui.mode_names import INDEX_ONLY, completion_title, mode_label, scope_line
-from repowise.cli.ui.result_panels import build_completion_panel
+from repowise.cli.ui.result_panels import build_completion_panel, print_completion_panel
 
 
 @dataclass(frozen=True)
@@ -212,6 +212,24 @@ def _footer(
     return lines
 
 
+def _panel_parts(
+    facts: FinishFacts, setup: Any, repo_path: Path | None, files_written: list[Path] | None
+) -> dict[str, Any]:
+    """Title, metrics, body and footer, for the panel and for its plain form."""
+    body: list[RenderableType] = []
+    connected = connected_lines(setup)
+    if connected:
+        body.append(Text(""))
+        body += connected
+    body += _ask_lines(facts.top_hotspot)
+    return {
+        "title": escape(completion_title(facts.scope)),
+        "metrics": _metrics(facts),
+        "body": body,
+        "footer": _footer(facts, setup, repo_path or Path("."), files_written or []),
+    }
+
+
 def build_finish_panel(
     facts: FinishFacts,
     *,
@@ -225,17 +243,35 @@ def build_finish_panel(
 
     *owl* is the title owl's state: how the run finished.
     """
-    body: list[RenderableType] = []
-    connected = connected_lines(setup)
-    if connected:
-        body.append(Text(""))
-        body += connected
-    body += _ask_lines(facts.top_hotspot)
+    parts = _panel_parts(facts, setup, repo_path, files_written)
     return build_completion_panel(
-        escape(completion_title(facts.scope)),
-        _metrics(facts),
+        parts["title"],
+        parts["metrics"],
         next_steps=steps,
-        body=body,
-        footer=_footer(facts, setup, repo_path or Path("."), files_written or []),
+        body=parts["body"],
+        footer=parts["footer"],
+        owl=owl,
+    )
+
+
+def print_finish_panel(
+    console: Any,
+    facts: FinishFacts,
+    *,
+    steps: list[tuple[str, str]],
+    setup: Any = None,
+    repo_path: Path | None = None,
+    files_written: list[Path] | None = None,
+    owl: str = mascot.DONE,
+) -> None:
+    """The finish panel on a terminal; the same rows as plain lines off one."""
+    parts = _panel_parts(facts, setup, repo_path, files_written)
+    print_completion_panel(
+        console,
+        parts["title"],
+        parts["metrics"],
+        steps,
+        body=parts["body"],
+        footer=parts["footer"],
         owl=owl,
     )
