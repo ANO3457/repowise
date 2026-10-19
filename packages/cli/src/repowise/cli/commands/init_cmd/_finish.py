@@ -124,12 +124,21 @@ def save_run_config(run: InitRun) -> None:
 
 def register_clients(run: InitRun) -> None:
     """Global client registration, then the workspace's distill verdict."""
-    from repowise.cli.editor_integrations.global_mcp import confirm_global_mcp
+    from repowise.cli.editor_integrations.global_mcp import (
+        REGISTER_LATER_COMMAND,
+        confirm_global_mcp,
+    )
 
-    if confirm_global_mcp(
+    if run.global_mcp_consent is False:
+        console.print(
+            "  [dim]Global Claude config left as is (this repo only). Run "
+            f"'{REGISTER_LATER_COMMAND}' to point it here later.[/dim]"
+        )
+    elif confirm_global_mcp(
         console,
         run.repo_path,
-        yes=run.opts.yes,
+        # Answered on the plan screen: print old and new, do not ask again.
+        yes=run.opts.yes or run.global_mcp_consent is True,
         no_editor_setup=not run.opts.editor_setup,
     ):
         register_editor_clients(console, run.repo_path)

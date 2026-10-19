@@ -1,4 +1,4 @@
-"""Quick repo pre-scan (fast, no AST) and its summary panel."""
+"""Quick repo pre-scan (fast, no AST) and the estimates read from it."""
 
 from __future__ import annotations
 
@@ -6,8 +6,6 @@ import os
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
-
-from rich.console import Console
 
 from repowise.core.fs_walk import PRUNED_DIRS, walk_repo
 from repowise.core.ingestion.languages.registry import REGISTRY as _LANG_REGISTRY
@@ -174,48 +172,16 @@ def estimated_wiki_render_minutes(documentable: int) -> tuple[int, int]:
     return max(1, round(documentable / 1000)), max(2, round(2 * documentable / 1000))
 
 
-def print_scan_summary(console: Console, scan: RepoScanInfo) -> None:
-    """Print a compact pre-scan summary below the banner."""
-    # File count + language count
-    source_langs = {lang: c for lang, c in source_file_counts(scan).items() if c > 0}
-    lang_count = len(source_langs)
+def estimated_index_minutes(scan: RepoScanInfo) -> tuple[int, int]:
+    """Rough low/high minutes to parse, graph and walk git for *scan*.
 
-    parts = [f"[bold]{scan.total_files:,}[/bold] files"]
-    if lang_count:
-        parts.append(f"[bold]{lang_count}[/bold] languages")
-    if scan.total_commits:
-        parts.append(f"[bold]{scan.total_commits:,}[/bold] commits")
+    Calibrated against ~700-file Python+TS repos: traverse, parse and graph
+    come in around 2 min per thousand source files. A range, not a point.
+    """
+    src_files = sum(source_file_counts(scan).values()) or scan.total_files
+    return max(1, round(src_files / 500)), max(2, round(src_files / 250))
 
-    header_line = " · ".join(parts)
 
-    # Top languages (source code only, top 4)
-    total_source = sum(source_langs.values()) or 1
-    top_langs = sorted(source_langs.items(), key=lambda x: -x[1])[:4]
-    lang_parts = [f"{lang} {count / total_source:.0%}" for lang, count in top_langs]
-    if len(source_langs) > 4:
-        lang_parts.append(f"+{len(source_langs) - 4} more")
-    lang_line = ", ".join(lang_parts) if lang_parts else "no source files detected"
-
-    # Rough wall-time estimate so users know what they're committing to.
-    # Calibrated against ~700-file Python+TS repos: traverse+parse+graph
-    # comes in around 2 min/1k source files, plus ~1 min/100 LLM pages.
-    # We surface a range, not a point, to set honest expectations.
-    src_files = sum(source_langs.values()) or scan.total_files
-    ingest_min = max(1, round(src_files / 500))
-    ingest_max = max(2, round(src_files / 250))
-    # Both halves are numbers now. The model step is deliberately absent: its
-    # duration follows the concept-page count, which ingestion has not produced
-    # yet, and the generation plan states it exactly (with a price) a screen
-    # later. A second guess here would only be a worse version of that one.
-    render_min, render_max = estimated_wiki_render_minutes(estimated_documentable_files(scan))
-    eta_line = (
-        f"~{ingest_min}-{ingest_max} min to index · "
-        f"~{render_min}-{render_max} min more to render and embed the wiki"
-    )
-
-    # A readout, so no border. It sits directly under the banner and used to be
-    # the first of five boxes a user crossed before anything was asked of them.
-    console.print(f"  {header_line}")
-    console.print(f"  [dim]{lang_line}[/dim]")
-    console.print(f"  [dim]{eta_line}[/dim]")
-    console.print()
+def estimated_model_minutes(model_calls: int) -> int:
+    """Rough minutes an API model takes for *model_calls* pages, about 1 min per 100."""
+    return max(1, round(model_calls / 100))
