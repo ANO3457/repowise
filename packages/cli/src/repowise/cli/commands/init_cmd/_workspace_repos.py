@@ -24,6 +24,18 @@ def split_repo_names(raw: str | None) -> list[str]:
     return [part.strip() for part in (raw or "").split(",") if part.strip()]
 
 
+def check_repos_flag(repos: str | None, *, init_all: bool, is_workspace: bool) -> None:
+    """Reject ``--repos`` where it cannot apply, before any indexing starts."""
+    if not repos:
+        return
+    if init_all:
+        raise click.UsageError("--repos and --all contradict each other. Pass one.")
+    if not is_workspace:
+        raise click.UsageError(
+            "--repos picks repos in a folder that holds several; this run indexes one repo."
+        )
+
+
 def select_workspace_repos(
     scan: Any, *, repo_names: list[str], select_all: bool
 ) -> tuple[list[Any], str, Any] | None:

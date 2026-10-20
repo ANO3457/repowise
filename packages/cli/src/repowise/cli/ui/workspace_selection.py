@@ -143,6 +143,7 @@ def match_repo_names(repos: list[Any], names: list[str], root: Any = None) -> li
     message that names every bad name and what would work instead.
     """
     picked: list[Any] = []
+    seen: set[str] = set()
     unknown: list[str] = []
     for raw in names:
         name = raw.replace("\\", "/").strip("/").casefold()
@@ -156,7 +157,8 @@ def match_repo_names(repos: list[Any], names: list[str], root: Any = None) -> li
         elif len(hits) > 1:
             paths = ", ".join(_display_path(r, root) for r in hits)
             raise ValueError(f"'{raw}' matches {len(hits)} repos ({paths}). Name one by its path.")
-        elif hits[0] not in picked:
+        elif hits[0].alias not in seen:
+            seen.add(hits[0].alias)
             picked.append(hits[0])
     if unknown:
         available = ", ".join(_display_path(r, root) for r in repos)

@@ -60,7 +60,7 @@ from ._questions import (
     _offer_fast_mode,
 )
 from ._seed import delegate_to_seeded_update
-from ._workspace_repos import split_repo_names
+from ._workspace_repos import check_repos_flag, split_repo_names
 from .reporting import show_analysis_summary
 from .workspace import _workspace_init
 
@@ -478,8 +478,6 @@ def init_command(**params: Any) -> None:
 
     if not repo_path.is_dir():
         raise reasoned_error(f"Not a directory: {repo_path}", reason="invalid_path")
-    if opts.repos and opts.init_all:
-        raise click.UsageError("--repos and --all contradict each other. Pass one.")
 
     # ---- Workspace detection ----
     # If the path contains multiple git repos (and is not itself a single repo),
@@ -490,10 +488,7 @@ def init_command(**params: Any) -> None:
     scan = scan_for_repos(repo_path, include_submodules=opts.include_submodules)
 
     is_workspace = len(scan.repos) > 1 and not opts.no_workspace
-    if opts.repos and not is_workspace:
-        raise click.UsageError(
-            "--repos picks repos in a folder that holds several; this run indexes one repo."
-        )
+    check_repos_flag(opts.repos, init_all=opts.init_all, is_workspace=is_workspace)
     if delegate_to_seeded_update(opts, repo_path, scan):
         return
     if is_workspace:

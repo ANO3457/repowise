@@ -154,24 +154,16 @@ def _run_index_for_repo(
     generated_pages = 0
     resolved_reasoning = resolve_reasoning(config=primary_cfg)
     if docs_mode != "none":
-        try:
-            generated_pages = _generate_docs_for_added_repo(
-                repo_path=repo_path,
-                provider=provider,
-                embedder_name=embedder_name,
-                concurrency=concurrency,
-                reasoning=resolved_reasoning,
-                exclude_patterns=exclude_patterns,
-            )
-            source = (
-                "built from code"
-                if provider is None
-                else f"written by {getattr(provider, 'model_name', 'the model')}"
-            )
-            console.print(f"  [green]✓[/green] Documentation: {generated_pages} pages, {source}")
-        except Exception as exc:
-            console.print(f"  [yellow]Documentation failed: {exc}[/yellow]")
-            docs_skip_reason = f"generation error: {exc}"
+        generated_pages, error = _build_added_repo_docs(
+            repo_path=repo_path,
+            provider=provider,
+            embedder_name=embedder_name,
+            concurrency=concurrency,
+            reasoning=resolved_reasoning,
+            exclude_patterns=exclude_patterns,
+        )
+        if error is not None:
+            docs_skip_reason = error
             # A model run keeps its provider state so `update --docs` retries it.
             if provider is None:
                 docs_mode = "none"
@@ -202,6 +194,22 @@ def _run_index_for_repo(
         console.print(
             f"  Run [bold]repowise update --repo {alias} --docs[/bold] to generate documentation."
         )
+
+
+def _build_added_repo_docs(*, provider: object | None, **kwargs: object) -> tuple[int, str | None]:
+    """Generate the added repo's documentation as ``(pages, error)``; never raises."""
+    try:
+        pages = _generate_docs_for_added_repo(provider=provider, **kwargs)  # type: ignore[arg-type]
+    except Exception as exc:
+        console.print(f"  [yellow]Documentation failed: {exc}[/yellow]")
+        return 0, f"generation error: {exc}"
+    source = (
+        "built from code"
+        if provider is None
+        else f"written by {getattr(provider, 'model_name', 'the model')}"
+    )
+    console.print(f"  [green]✓[/green] Documentation: {pages} pages, {source}")
+    return pages, None
 
 
 def _load_primary_config(
