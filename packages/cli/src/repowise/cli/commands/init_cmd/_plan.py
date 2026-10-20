@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 from dataclasses import dataclass, replace
+from pathlib import Path
 from typing import Any
 
 import click
@@ -47,12 +48,12 @@ class _Answers:
     git_exclude: bool = False
 
 
-def _outside_lines(run: InitRun) -> tuple[str, ...]:
+def outside_lines(repo_path: Path) -> tuple[str, ...]:
     """Old and new target of the global MCP entry, empty when it would not move."""
     from repowise.cli.editor_integrations.global_mcp import read_global_mcp_target
 
     try:
-        target = read_global_mcp_target(run.repo_path)
+        target = read_global_mcp_target(repo_path)
     # A probe failure never blocks the screen; JSONDecodeError is a ValueError.
     except (OSError, ValueError, KeyError, TypeError):
         return ()
@@ -123,7 +124,7 @@ def _base_state(run: InitRun, scan: Any, prefer: tuple[str, ...]) -> PlanState:
         scan=scan,
         offer=offer,
         editor_setup=editor_setup,
-        outside=_outside_lines(run) if editor_setup else (),
+        outside=outside_lines(run.repo_path) if editor_setup else (),
         large_repo=should_offer_fast_mode(scan),
     )
 
@@ -251,6 +252,15 @@ def _until_enter(
             return
 
 
+def say_no_answer() -> None:
+    """The line a plan screen prints when stdin ends before Enter."""
+    console.print(
+        f"\n[{WARN}]No answer available on stdin[/] "
+        "[dim]- continuing with defaults. Pass --yes to skip the "
+        "questions, or --prose / --no-prose to choose directly.[/dim]"
+    )
+
+
 def run_plan_screen(run: InitRun, scan: Any) -> None:
     """Show the plan, act on keys until Enter, then fold the answers into *run*.
 
@@ -271,10 +281,6 @@ def run_plan_screen(run: InitRun, scan: Any) -> None:
     except EOFError:
         run.opts, run.generate_docs, run.editor_options = before
         run.is_interactive = False
-        console.print(
-            f"\n[{WARN}]No answer available on stdin[/] "
-            "[dim]- continuing with defaults. Pass --yes to skip the "
-            "questions, or --prose / --no-prose to choose directly.[/dim]"
-        )
+        say_no_answer()
         return
     _apply(run, base, answers)

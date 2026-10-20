@@ -166,9 +166,9 @@ def _print_outside(console: Console, state: PlanState) -> None:
     _say(console, "[dim]Press s to leave it as is and connect this repo only.[/dim]")
 
 
-def _key_line(state: PlanState) -> str:
+def _key_line(state: PlanState, extra_keys: tuple[tuple[str, str], ...]) -> str:
     model_key = "back to built from code" if state.chosen is not None else "add a model"
-    keys = [("Enter", "start"), ("m", model_key), ("e", "edit plan")]
+    keys = [("Enter", "start"), ("m", model_key), ("e", "edit plan"), *extra_keys]
     if state.can_keep_global:
         keys.append(("s", "point it here" if state.this_repo_only else "this repo only"))
     keys.append(("q", "quit"))
@@ -186,6 +186,21 @@ def render_plan(console: Console, state: PlanState) -> None:
             f"({INDEX_ONLY.lower()}) is recommended: choose run mode fast under e.[/dim]",
             indent=2,
         )
+    render_plan_body(console, state)
+
+
+def render_plan_body(
+    console: Console,
+    state: PlanState,
+    *,
+    extra_keys: tuple[tuple[str, str], ...] = (),
+    edit_preview: str = EDIT_PREVIEW,
+) -> None:
+    """The plan rows, the model opt-in, the outside line and the keys.
+
+    Shared by the single-repo and the workspace screen; each prints its own
+    header above it and may offer *extra_keys* before ``s`` and ``q``.
+    """
     console.print()
     console.print(_plan_heading(state))
     rows = [
@@ -201,5 +216,5 @@ def render_plan(console: Console, state: PlanState) -> None:
     _print_model_offer(console, state)
     _print_outside(console, state)
     console.print()
-    _say(console, _key_line(state).strip(), indent=2)
-    _say(console, f"[dim]e covers {EDIT_PREVIEW}.[/dim]", indent=2)
+    _say(console, _key_line(state, extra_keys).strip(), indent=2)
+    _say(console, f"[dim]e covers {edit_preview}.[/dim]", indent=2)
