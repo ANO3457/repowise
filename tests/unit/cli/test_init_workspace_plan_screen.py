@@ -13,6 +13,7 @@ from rich.console import Console
 
 from repowise.cli.ui import workspace_selection
 from repowise.cli.ui.plan_screen import (
+    EDIT,
     MODEL,
     QUIT,
     REPOS,
@@ -273,3 +274,20 @@ def test_eof_inside_the_repo_question_falls_back_too(screen: Any, monkeypatch: A
     monkeypatch.setattr(workspace_selection.Prompt, "ask", eof)
     assert screen.drive(REPOS) is None
 
+
+
+def test_e_does_not_ask_file_pages_a_workspace_would_ignore(screen: Any, monkeypatch: Any) -> None:
+    from repowise.cli.ui import mode_selection
+
+    def no_file_pages(*_a: Any, **_k: Any) -> Any:
+        raise AssertionError("file pages asked on a workspace")
+
+    monkeypatch.setattr(mode_selection, "prompt_file_page_volume", no_file_pages)
+    monkeypatch.setattr(mode_selection.click, "confirm", lambda *_a, **k: k.get("default", False))
+    monkeypatch.setattr(mode_selection.click, "prompt", lambda *_a, **k: k.get("default"))
+    monkeypatch.setattr(screen.module.click, "confirm", lambda *_a, **k: False)
+    monkeypatch.setattr(mode_selection, "_prompt_exclude", lambda *_a, **_k: [])
+    monkeypatch.setattr(mode_selection, "_prompt_index_only_search", lambda *_a, **_k: None)
+    plan = screen.drive(EDIT, START)
+    assert plan.sync is False
+    assert plan.answers.index_only is True

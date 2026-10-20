@@ -177,6 +177,7 @@ def _edit_plan(screen: _Screen, answers: WorkspaceAnswers) -> None:
         wiki_style=answers.wiki_style,
         language=answers.language,
         commit_limit=answers.commit_limit,
+        ask_file_pages=False,
     )
     apply_workspace_advanced(answers, adv)
     if screen.state.plan.editor_setup:

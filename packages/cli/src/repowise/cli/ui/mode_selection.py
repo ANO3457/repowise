@@ -445,8 +445,12 @@ def interactive_advanced_config(
     wiki_style: str | None = None,
     language: str | None = None,
     commit_limit: int | None = None,
+    ask_file_pages: bool = True,
 ) -> dict[str, Any]:
     """Prompt for advanced init options, grouped into logical sections.
+
+    *ask_file_pages* is off for a workspace: each repo keeps the file-page
+    cap in its own config.yaml, so one answer would apply nowhere.
 
     When *scan* is provided, uses it for smart defaults and contextual hints
     (file counts, suggested exclude patterns, etc.).
@@ -486,7 +490,7 @@ def interactive_advanced_config(
     # Asked in both branches: an index-only run renders file pages too (they need
     # no model), so page volume is a real question either way. Fast mode renders
     # no wiki at all, so there is nothing to bound.
-    if result.get("run_mode") != "fast":
+    if ask_file_pages and result.get("run_mode") != "fast":
         result["max_file_pages"] = prompt_file_page_volume(console, scan)
     if generate_docs:
         _prompt_generation(
