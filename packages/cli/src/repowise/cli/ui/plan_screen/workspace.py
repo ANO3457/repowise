@@ -96,6 +96,34 @@ def _shows_calls(state: WorkspacePlanState) -> bool:
     return plan.run_mode != "fast" and (plan.chosen is not None or plan.offer.price is not None)
 
 
+def _status(repo: Any, primary: bool) -> Text:
+    """``new`` / ``indexed``, with submodule and primary said in words."""
+    status = Text("indexed", style=OK) if repo.has_repowise else Text("new", style="dim")
+    if repo.is_submodule:
+        status.append(" (submodule)", style="dim")
+    if primary:
+        status.append(" · primary", style="bold")
+    return status
+
+
+def _row(state: WorkspacePlanState, idx: int, calls: bool) -> list[Any]:
+    """One repo's cells; the model-calls cell only when that column is shown."""
+    row = state.repos[idx]
+    picked = idx in state.selected
+    cells: list[Any] = [
+        Text("[x]" if picked else "[ ]"),
+        str(idx + 1),
+        Text(row.repo.name),
+        Text(display_path(row.repo, state.root)),
+        f"{row.scan.total_files:,}",
+        _status(row.repo, picked and row.repo.alias == state.primary),
+    ]
+    if calls:
+        n = model_calls_for(RunShape(row.scan, state.onboarding)) if picked else 0
+        cells.append(f"about {n:,}" if picked else "")
+    return cells
+
+
 def repo_table(state: WorkspacePlanState, limit: int | None = ROWS_SHOWN) -> Table:
     """The repo list: pick mark, number, name, path, files, status."""
     table = Table(box=None, padding=(0, 1), pad_edge=False, show_header=True, header_style="dim")
@@ -108,27 +136,9 @@ def repo_table(state: WorkspacePlanState, limit: int | None = ROWS_SHOWN) -> Tab
     calls = _shows_calls(state)
     if calls:
         table.add_column("Model calls", justify="right", no_wrap=True)
-    picked = set(state.selected)
-    rows = state.repos if limit is None else state.repos[:limit]
-    for idx, row in enumerate(rows):
-        repo = row.repo
-        status = Text("indexed", style=OK) if repo.has_repowise else Text("new", style="dim")
-        if repo.is_submodule:
-            status.append(" (submodule)", style="dim")
-        if idx in picked and repo.alias == state.primary:
-            status.append(" · primary", style="bold")
-        cells: list[Any] = [
-            Text("[x]" if idx in picked else "[ ]"),
-            str(idx + 1),
-            Text(repo.name),
-            Text(display_path(repo, state.root)),
-            f"{row.scan.total_files:,}",
-            status,
-        ]
-        if calls:
-            n = model_calls_for(RunShape(row.scan, state.onboarding)) if idx in picked else 0
-            cells.append(f"about {n:,}" if idx in picked else "")
-        table.add_row(*cells)
+    count = len(state.repos) if limit is None else min(limit, len(state.repos))
+    for idx in range(count):
+        table.add_row(*_row(state, idx, calls))
     return table
 
 
@@ -167,6 +177,21 @@ def render_workspace_plan(console: Console, state: WorkspacePlanState) -> None:
     )
 
 
+def _ask_selection(console: Console, ask: Callable[[], str], count: int) -> list[int] | None:
+    """Zero-based indices typed in the selection grammar; None when Enter keeps it."""
+    while True:
+        raw = ask().strip().lower()
+        if not raw:
+            return None
+        picked = list(range(count)) if raw == "all" else parse_selection(raw, count)
+        if picked:
+            return sorted(picked)
+        if raw == "none":
+            console.print(f"  [{WARN}]Choose at least one repo, or press q on the plan to quit.[/]")
+        else:
+            console.print(f"  [{WARN}]Invalid selection. Use numbers (1,3), ranges (2-5) or all.[/]")
+
+
 def choose_repos(
     console: Console, state: WorkspacePlanState, ask: Callable[[], str] | None = None
 ) -> None:
@@ -184,19 +209,7 @@ def choose_repos(
     console.print(
         "  [dim]Numbers (1,3), ranges (2-5) or all. Enter keeps the current choice.[/dim]"
     )
-    count = len(state.repos)
-    while True:
-        raw = ask().strip().lower()
-        if not raw:
-            break
-        picked = list(range(count)) if raw == "all" else parse_selection(raw, count)
-        if picked:
-            state.selected = sorted(picked)
-            break
-        if raw == "none":
-            console.print(f"  [{WARN}]Choose at least one repo, or press q on the plan to quit.[/]")
-        else:
-            console.print(f"  [{WARN}]Invalid selection. Use numbers (1,3), ranges (2-5) or all.[/]")
+    state.selected = _ask_selection(console, ask, len(state.repos)) or state.selected
     repos = [r.repo for r in state.picked]
     state.primary = (
         interactive_primary_select(console, repos, current=state.primary)
