@@ -60,6 +60,7 @@ from ._questions import (
     _offer_fast_mode,
 )
 from ._seed import delegate_to_seeded_update
+from ._workspace_repos import split_repo_names
 from .reporting import show_analysis_summary
 from .workspace import _workspace_init
 
@@ -93,6 +94,7 @@ def _run_workspace_init(opts: InitOptions, scan: Any) -> None:
     _workspace_init(
         scan=scan,
         init_all=opts.init_all,
+        repo_names=split_repo_names(opts.repos),
         exclude_patterns=list(opts.exclude),
         commit_limit=opts.commit_limit,
         follow_renames=opts.follow_renames,
@@ -347,7 +349,21 @@ def _run_workspace_init(opts: InitOptions, scan: Any) -> None:
     "init_all",
     is_flag=True,
     default=False,
-    help="In multi-repo mode, index all detected repos without prompting.",
+    help=(
+        "In a folder with several repos, index every detected repo without "
+        "prompting. --yes and a piped stdin do the same; use --repos to pick some."
+    ),
+)
+@click.option(
+    "--repos",
+    "repos",
+    default=None,
+    metavar="NAMES",
+    help=(
+        "In a folder with several repos, index only these, with no picker. "
+        "Comma-separated names (alias, directory name, or path relative to the "
+        "folder when two repos share a name). The first one listed is primary."
+    ),
 )
 @click.option(
     "--onboarding/--no-onboarding",
@@ -462,6 +478,8 @@ def init_command(**params: Any) -> None:
 
     if not repo_path.is_dir():
         raise reasoned_error(f"Not a directory: {repo_path}", reason="invalid_path")
+    if opts.repos and opts.init_all:
+        raise click.UsageError("--repos and --all contradict each other. Pass one.")
 
     # ---- Workspace detection ----
     # If the path contains multiple git repos (and is not itself a single repo),
@@ -471,9 +489,14 @@ def init_command(**params: Any) -> None:
 
     scan = scan_for_repos(repo_path, include_submodules=opts.include_submodules)
 
+    is_workspace = len(scan.repos) > 1 and not opts.no_workspace
+    if opts.repos and not is_workspace:
+        raise click.UsageError(
+            "--repos picks repos in a folder that holds several; this run indexes one repo."
+        )
     if delegate_to_seeded_update(opts, repo_path, scan):
         return
-    if len(scan.repos) > 1 and not opts.no_workspace:
+    if is_workspace:
         _run_workspace_init(opts, scan)
         return
 

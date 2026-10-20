@@ -59,9 +59,7 @@ from repowise.cli.ui import (
     RichProgressCallback,
     interactive_advanced_config,
     interactive_mode_select,
-    interactive_primary_select,
     interactive_provider_config_select,
-    interactive_repo_select,
     load_dotenv,
     print_banner,
 )
@@ -69,6 +67,7 @@ from repowise.core.docs_mode import docs_mode_state_fields
 from repowise.core.generation.styles import DEFAULT_STYLE
 
 from ._interactive import offer_distill_rewrite_hook, offer_hook_install
+from ._workspace_repos import select_workspace_repos
 from .generation import (
     CostGateDeclined,
     concept_page_count,
@@ -762,6 +761,7 @@ def _workspace_init(
     *,
     scan: Any,
     init_all: bool,
+    repo_names: list[str],
     exclude_patterns: list[str],
     commit_limit: int | None,
     follow_renames: bool,
@@ -807,10 +807,7 @@ def _workspace_init(
     print_banner(console, repo_name=f"Workspace: {root.name}")
     console.print(f"  Detected [bold]{len(scan.repos)}[/bold] repositories in {root}\n")
 
-    # --yes, --all or a non-terminal stdin take every detected repo (and the
-    # first as primary) without prompting: asking a pipe would end the run with
-    # an EOFError before anything was done, and "every repo" is what --all means.
-    picked = _select_workspace_repos(scan, select_all=init_all or yes or not sys.stdin.isatty())
+    picked = select_workspace_repos(scan, repo_names=repo_names, select_all=init_all or yes)
     if picked is None:
         return
     selected, primary_alias, primary_repo = picked
@@ -906,22 +903,6 @@ def _workspace_init(
         )
     console.print()
     _raise_on_embed_failures(totals.embed_failures)
-
-
-def _select_workspace_repos(scan: Any, *, select_all: bool) -> tuple[list[Any], str, Any] | None:
-    """The repos to index, the primary alias and repo; None when none were selected."""
-    root = scan.root
-    selected = (
-        list(scan.repos) if select_all else interactive_repo_select(console, scan.repos, root)
-    )
-    if not selected:
-        console.print(f"[{WARN}]No repositories selected. Aborting.[/]")
-        return None
-    primary_alias = (
-        selected[0].alias if select_all else interactive_primary_select(console, selected)
-    )
-    primary_repo = next((r for r in selected if r.alias == primary_alias), selected[0])
-    return selected, primary_alias, primary_repo
 
 
 def _save_workspace(
