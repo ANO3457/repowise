@@ -58,20 +58,17 @@ from repowise.cli.ui import (
     WARN,
     MaybeCountColumn,
     RichProgressCallback,
-    interactive_advanced_config,
-    interactive_mode_select,
     interactive_primary_select,
-    interactive_provider_config_select,
     interactive_repo_select,
     load_dotenv,
     print_banner,
 )
 from repowise.cli.ui.mode_names import pages
-from repowise.cli.ui.subscription import SubscriptionContext
 from repowise.core.docs_mode import docs_mode_state_fields
 from repowise.core.generation.styles import DEFAULT_STYLE
 
 from ._interactive import offer_distill_rewrite_hook, offer_hook_install
+from ._workspace_plan import WorkspaceAnswers, run_workspace_plan_screen
 from .generation import (
     CostGateDeclined,
     concept_page_count,
@@ -726,27 +723,6 @@ def _run_cross_repo_analysis(ws_config: Any, root: Any, selected: list[Any], err
 
 
 @dataclass
-class _WorkspaceAnswers:
-    """The run settings the mode menu, advanced config and provider setup may change."""
-
-    index_only: bool
-    provider_name: str | None
-    model: str | None
-    reasoning: str | None
-    commit_limit: int | None
-    follow_renames: bool
-    skip_tests: bool
-    skip_infra: bool
-    concurrency: int
-    exclude_patterns: list[str]
-    test_run: bool
-    onboarding: bool
-    wiki_style: str
-    language: str | None
-    embedder_name_resolved: str
-
-
-@dataclass
 class _WorkspaceTotals:
     """What the per-repo loop indexed, and what failed."""
 
@@ -807,20 +783,8 @@ def _workspace_init(
     root = scan.root
 
     print_banner(console, repo_name=f"Workspace: {root.name}")
-    console.print(f"  Detected [bold]{len(scan.repos)}[/bold] repositories in {root}\n")
 
-    # --yes, --all or a non-terminal stdin take every detected repo (and the
-    # first as primary) without prompting: asking a pipe would end the run with
-    # an EOFError before anything was done, and "every repo" is what --all means.
-    picked = _select_workspace_repos(scan, select_all=init_all or yes or not sys.stdin.isatty())
-    if picked is None:
-        return
-    selected, primary_alias, primary_repo = picked
-    load_dotenv(primary_repo.path)
-
-    # --yes suppresses every prompt, so it means non-interactive.
-    is_interactive = sys.stdin.isatty() and provider_name is None and not index_only and not yes
-    answers = _WorkspaceAnswers(
+    answers = WorkspaceAnswers(
         index_only=index_only,
         provider_name=provider_name,
         model=model,
@@ -835,18 +799,47 @@ def _workspace_init(
         onboarding=onboarding,
         wiki_style=wiki_style,
         language=language,
-        embedder_name_resolved=resolve_embedder(embedder_name),
+        embedder_name=embedder_name,
     )
+    editor_options = _workspace_editor_options(no_claude_md, agents_md, codex_setup)
+    # --yes suppresses every prompt, so it means non-interactive.
+    plan = None
+    if sys.stdin.isatty() and provider_name is None and not index_only and not yes:
+        plan = run_workspace_plan_screen(
+            scan,
+            answers,
+            editor_options=editor_options,
+            editor_setup=editor_setup,
+            save_key=save_key,
+            hook=hook,
+        )
+        # None: stdin ended, so nobody is there to pick repos either.
+        init_all = init_all or plan is None
+    if plan is not None:
+        selected, primary_alias, answers = plan.selected, plan.primary_alias, plan.answers
+        hook = plan.sync if plan.sync is not None else hook
+    else:
+        console.print(f"  Detected [bold]{len(scan.repos)}[/bold] repositories in {root}\n")
+        # --yes, --all or a non-terminal stdin take every detected repo (and the
+        # first as primary) without prompting: asking a pipe would end the run with
+        # an EOFError before anything was done, and "every repo" is what --all means.
+        picked = _select_workspace_repos(
+            scan, select_all=init_all or yes or not sys.stdin.isatty()
+        )
+        if picked is None:
+            return
+        selected, primary_alias = picked
+    primary_repo = next(r for r in selected if r.alias == primary_alias)
+    load_dotenv(primary_repo.path)
+    answers.embedder_name_resolved = resolve_embedder(answers.embedder_name)
     # Whether the user named this embedder, rather than resolve_embedder
     # inferring one from an LLM key: the free template path will not put a
     # hosted embedder on the user's bill unless they named it.
-    embedder_was_requested = bool(embedder_name) or bool(
+    embedder_was_requested = bool(answers.embedder_name) or bool(
         os.environ.get("REPOWISE_EMBEDDER", "").strip()
     )
-    if is_interactive:
-        _ask_workspace_mode(answers, selected, primary_repo, embedder_name, save_key=save_key)
     provider, resolved_reasoning = _resolve_workspace_provider(
-        answers, primary_repo, embedder_name, yes=yes, save_key=save_key
+        answers, primary_repo, yes=yes, save_key=save_key
     )
     ws_config = _workspace_config(selected, root, primary_alias, dry_run=dry_run)
 
@@ -855,7 +848,7 @@ def _workspace_init(
     ctx = _WorkspaceCtx(
         provider=provider,
         ws_config=ws_config,
-        editor_options=_workspace_editor_options(no_claude_md, agents_md, codex_setup),
+        editor_options=editor_options,
         editor_setup=editor_setup,
         save_key=save_key,
         index_only=answers.index_only,
@@ -884,7 +877,13 @@ def _workspace_init(
     # A dry run writes nothing for any repo, so nothing at the workspace level.
     if not dry_run:
         _save_workspace(
-            ws_config, root, selected, totals.errors, editor_setup=editor_setup, yes=yes
+            ws_config,
+            root,
+            selected,
+            totals.errors,
+            editor_setup=editor_setup,
+            yes=yes,
+            global_consent=plan.global_consent if plan is not None else None,
         )
 
     show_workspace_completion(
@@ -912,8 +911,8 @@ def _workspace_init(
     _raise_on_embed_failures(totals.embed_failures)
 
 
-def _select_workspace_repos(scan: Any, *, select_all: bool) -> tuple[list[Any], str, Any] | None:
-    """The repos to index, the primary alias and repo; None when none were selected."""
+def _select_workspace_repos(scan: Any, *, select_all: bool) -> tuple[list[Any], str] | None:
+    """The repos to index and the primary alias; None when none were selected."""
     root = scan.root
     selected = (
         list(scan.repos) if select_all else interactive_repo_select(console, scan.repos, root)
@@ -924,8 +923,7 @@ def _select_workspace_repos(scan: Any, *, select_all: bool) -> tuple[list[Any], 
     primary_alias = (
         selected[0].alias if select_all else interactive_primary_select(console, selected)
     )
-    primary_repo = next((r for r in selected if r.alias == primary_alias), selected[0])
-    return selected, primary_alias, primary_repo
+    return selected, primary_alias
 
 
 def _save_workspace(
@@ -936,94 +934,42 @@ def _save_workspace(
     *,
     editor_setup: bool,
     yes: bool,
+    global_consent: bool | None = None,
 ) -> None:
-    """Save the indexed timestamps, run cross-repo analysis, register the primary."""
+    """Save the indexed timestamps, run cross-repo analysis, register the primary.
+
+    *global_consent* is the plan screen's answer for the global MCP entry;
+    ``None`` when the screen did not ask.
+    """
     ws_config.save(root)
     _run_cross_repo_analysis(ws_config, root, selected, errors)
     primary_entry = ws_config.get_primary()
-    if primary_entry:
-        primary_path = (root / primary_entry.path).resolve()
-        from repowise.cli.editor_integrations.global_mcp import confirm_global_mcp
-
-        if confirm_global_mcp(console, primary_path, yes=yes, no_editor_setup=not editor_setup):
-            register_editor_clients(console, primary_path)
-
-
-def _ask_workspace_mode(
-    answers: _WorkspaceAnswers,
-    selected: list[Any],
-    primary_repo: Any,
-    embedder_name: str | None,
-    *,
-    save_key: bool,
-) -> None:
-    """The mode menu, then the provider (and advanced config) it calls for."""
-    mode = interactive_mode_select(
-        console,
-        title=f"How much should repowise write for these {len(selected)} repos?",
-    )
-    if mode == "index_only":
-        answers.index_only = True
-    elif mode == "advanced":
-        _ask_workspace_provider(answers, primary_repo, save_key=save_key)
-        # The resolved style keeps the advanced section from asking per
-        # workspace: one style applies to every repo.
-        adv = interactive_advanced_config(
-            console,
-            prompt_reasoning=False,
-            generate_docs=not answers.index_only,
-            wiki_style=answers.wiki_style,
-            language=answers.language,
-        )
-        _apply_workspace_advanced(answers, adv, embedder_name)
-    elif not answers.index_only:
-        _ask_workspace_provider(answers, primary_repo, save_key=save_key)
-
-
-def _ask_workspace_provider(
-    answers: _WorkspaceAnswers, primary_repo: Any, *, save_key: bool
-) -> None:
-    selection = interactive_provider_config_select(
-        console,
-        answers.model,
-        answers.reasoning,
-        repo_path=primary_repo.path,
-        save_key=save_key,
-        subscription=SubscriptionContext(allow_skip=True),
-    )
-    if selection is None:
-        answers.index_only = True
+    if not primary_entry:
         return
-    answers.provider_name = selection.provider_name
-    answers.model = selection.model
-    answers.reasoning = selection.reasoning
+    from repowise.cli.editor_integrations.global_mcp import (
+        REGISTER_LATER_COMMAND,
+        confirm_global_mcp,
+    )
 
-
-def _apply_workspace_advanced(
-    answers: _WorkspaceAnswers, adv: dict[str, Any], embedder_name: str | None
-) -> None:
-    """Fold the advanced-config answers into the workspace run."""
-    answers.commit_limit = adv.get("commit_limit") or answers.commit_limit
-    answers.follow_renames = adv.get("follow_renames", answers.follow_renames)
-    answers.skip_tests = adv.get("skip_tests", answers.skip_tests)
-    answers.skip_infra = adv.get("skip_infra", answers.skip_infra)
-    answers.concurrency = adv.get("concurrency", answers.concurrency)
-    if adv.get("exclude"):
-        answers.exclude_patterns = list(answers.exclude_patterns) + list(adv["exclude"])
-    answers.test_run = adv.get("test_run", answers.test_run)
-    answers.reasoning = adv.get("reasoning") or answers.reasoning
-    answers.embedder_name_resolved = resolve_embedder(adv.get("embedder") or embedder_name)
-    answers.onboarding = adv.get("onboarding", answers.onboarding)
-    if adv.get("wiki_style"):
-        answers.wiki_style = adv["wiki_style"]
-    if adv.get("language"):
-        answers.language = adv["language"]
+    primary_path = (root / primary_entry.path).resolve()
+    if global_consent is False:
+        console.print(
+            "  [dim]Global Claude config left as is (this workspace only). Run "
+            f"'{REGISTER_LATER_COMMAND}' in the primary repo to point it here later.[/dim]"
+        )
+    elif confirm_global_mcp(
+        console,
+        primary_path,
+        # Answered on the plan screen: print old and new, do not ask again.
+        yes=yes or global_consent is True,
+        no_editor_setup=not editor_setup,
+    ):
+        register_editor_clients(console, primary_path)
 
 
 def _resolve_workspace_provider(
-    answers: _WorkspaceAnswers,
+    answers: WorkspaceAnswers,
     primary_repo: Any,
-    embedder_name: str | None,
     *,
     yes: bool,
     save_key: bool,
@@ -1043,7 +989,7 @@ def _resolve_workspace_provider(
             )
             # Re-resolve: interactive provider selection may just have set the
             # provider's API key in os.environ.
-            answers.embedder_name_resolved = resolve_embedder(embedder_name)
+            answers.embedder_name_resolved = resolve_embedder(answers.embedder_name)
             console.print(
                 f"  Provider: [{VALUE}]{provider.provider_name}[/] / "
                 f"Model: [{VALUE}]{provider.model_name}[/]"

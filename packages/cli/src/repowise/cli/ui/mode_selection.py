@@ -1,4 +1,4 @@
-"""Interactive mode selection and advanced configuration."""
+"""Interactive advanced configuration and the questions it shares."""
 
 from __future__ import annotations
 
@@ -7,14 +7,11 @@ from typing import Any
 
 import click
 from rich.console import Console
-from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.rule import Rule
-from rich.text import Text
 
 from repowise.cli.ui.brand import (
     BRAND,
-    BRAND_STYLE,
     DIM,
     VALUE,
     key_value_table,
@@ -51,59 +48,6 @@ def should_offer_fast_mode(scan: RepoScanInfo | None) -> bool:
     so the offer would just be noise.
     """
     return scan is not None and scan.total_files > LARGE_REPO_FILE_THRESHOLD
-
-
-def interactive_mode_select(console: Console, *, title: str | None = None) -> str:
-    """Let the user choose full / index-only / advanced.
-
-    All three options index identically; what differs is how much of the wiki a
-    model writes, so the panel asks that rather than "how would you like to
-    index". *title* overrides the question for callers indexing more than one
-    repo (the workspace flow shows this same panel for a whole workspace).
-
-    Returns ``"full"``, ``"index_only"``, or ``"advanced"``.
-    """
-    body = Text()
-    body.append("  [1]", style=BRAND_STYLE)
-    body.append(f"  {written_by()}  ", style="bold")
-    body.append("(recommended, needs an API key)\n", style="dim")
-    body.append("       Dependency graph, git history, code health, architectural\n")
-    body.append("       decisions, and documentation a model writes, with\n")
-    body.append("       architecture diagrams and API docs.\n")
-    body.append(
-        "       Costs a few cents to a few dollars; you see the estimate\n"
-        "       before anything runs.\n\n",
-        style="dim",
-    )
-
-    body.append("  [2]", style=BRAND_STYLE)
-    body.append(f"  {BUILT_FROM_CODE}  ", style="bold")
-    body.append("(no key, no spend)\n", style="dim")
-    body.append("       The same index, with every documentation page built from the code.\n")
-    body.append("       Subsystem pages come out as outlines; add a key later and run\n")
-    body.append("       repowise generate to have a model write them.\n\n")
-
-    body.append("  [3]", style=BRAND_STYLE)
-    body.append("  Advanced\n", style="bold")
-    body.append("       Full control: choose who writes the documentation, then tune indexing\n")
-    body.append("       and generation (commit limit, exclude patterns, concurrency, ...)")
-
-    console.print(
-        Panel(
-            body,
-            title=f"[bold]{title or 'How much should repowise write?'}[/bold]",
-            border_style=BRAND,
-            padding=(1, 2),
-        )
-    )
-
-    choice = Prompt.ask(
-        "  Select mode",
-        choices=["1", "2", "3"],
-        default="1",
-        console=console,
-    )
-    return {"1": "full", "2": "index_only", "3": "advanced"}[choice]
 
 
 def prompt_wiki_style(console: Console) -> str:
