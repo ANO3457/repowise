@@ -150,18 +150,18 @@ def match_repo_names(repos: list[Any], names: list[str], root: Any = None) -> li
         hits = [
             r
             for r in repos
-            if name in (r.alias.casefold(), r.name.casefold(), _display_path(r, root).casefold())
+            if name in (r.alias.casefold(), r.name.casefold(), display_path(r, root).casefold())
         ]
         if not hits:
             unknown.append(raw)
         elif len(hits) > 1:
-            paths = ", ".join(_display_path(r, root) for r in hits)
+            paths = ", ".join(display_path(r, root) for r in hits)
             raise ValueError(f"'{raw}' matches {len(hits)} repos ({paths}). Name one by its path.")
         elif hits[0].alias not in seen:
             seen.add(hits[0].alias)
             picked.append(hits[0])
     if unknown:
-        available = ", ".join(_display_path(r, root) for r in repos)
+        available = ", ".join(display_path(r, root) for r in repos)
         raise ValueError(f"Unknown repo: {', '.join(unknown)}. Available: {available}.")
     return picked
 
