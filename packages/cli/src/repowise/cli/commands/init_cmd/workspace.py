@@ -68,7 +68,7 @@ from repowise.core.docs_mode import docs_mode_state_fields
 from repowise.core.generation.styles import DEFAULT_STYLE
 
 from ._interactive import offer_distill_rewrite_hook, offer_hook_install
-from ._workspace_plan import WorkspaceAnswers, run_workspace_plan_screen
+from ._workspace_plan import WorkspaceAnswers, WorkspacePlan, run_workspace_plan_screen
 from .generation import (
     CostGateDeclined,
     concept_page_count,
@@ -802,33 +802,22 @@ def _workspace_init(
         embedder_name=embedder_name,
     )
     editor_options = _workspace_editor_options(no_claude_md, agents_md, codex_setup)
-    # --yes suppresses every prompt, so it means non-interactive.
-    plan = None
-    if sys.stdin.isatty() and provider_name is None and not index_only and not yes:
-        plan = run_workspace_plan_screen(
-            scan,
-            answers,
-            editor_options=editor_options,
-            editor_setup=editor_setup,
-            save_key=save_key,
-            hook=hook,
-        )
-        # None: stdin ended, so nobody is there to pick repos either.
-        init_all = init_all or plan is None
+    picked = _settle_repos(
+        scan,
+        answers,
+        interactive=sys.stdin.isatty() and provider_name is None and not index_only and not yes,
+        select_all=init_all or yes or not sys.stdin.isatty(),
+        editor_options=editor_options,
+        editor_setup=editor_setup,
+        save_key=save_key,
+        hook=hook,
+    )
+    if picked is None:
+        return
+    selected, primary_alias, plan = picked
     if plan is not None:
-        selected, primary_alias, answers = plan.selected, plan.primary_alias, plan.answers
+        answers = plan.answers
         hook = plan.sync if plan.sync is not None else hook
-    else:
-        console.print(f"  Detected [bold]{len(scan.repos)}[/bold] repositories in {root}\n")
-        # --yes, --all or a non-terminal stdin take every detected repo (and the
-        # first as primary) without prompting: asking a pipe would end the run with
-        # an EOFError before anything was done, and "every repo" is what --all means.
-        picked = _select_workspace_repos(
-            scan, select_all=init_all or yes or not sys.stdin.isatty()
-        )
-        if picked is None:
-            return
-        selected, primary_alias = picked
     primary_repo = next(r for r in selected if r.alias == primary_alias)
     load_dotenv(primary_repo.path)
     answers.embedder_name_resolved = resolve_embedder(answers.embedder_name)
@@ -909,6 +898,43 @@ def _workspace_init(
         )
     console.print()
     _raise_on_embed_failures(totals.embed_failures)
+
+
+def _settle_repos(
+    scan: Any,
+    answers: WorkspaceAnswers,
+    *,
+    interactive: bool,
+    select_all: bool,
+    editor_options: Any,
+    editor_setup: bool,
+    save_key: bool,
+    hook: bool | None,
+) -> tuple[list[Any], str, WorkspacePlan | None] | None:
+    """The repos, the primary alias and the plan screen's answers; None to stop.
+
+    *interactive* shows the plan screen (a terminal, no --yes, --provider or
+    --no-prose); *select_all* takes every repo without asking.
+    """
+    if interactive:
+        plan = run_workspace_plan_screen(
+            scan,
+            answers,
+            editor_options=editor_options,
+            editor_setup=editor_setup,
+            save_key=save_key,
+            hook=hook,
+        )
+        if plan is not None:
+            return plan.selected, plan.primary_alias, plan
+        # Stdin ended, so nobody is there to pick repos either.
+        select_all = True
+    console.print(f"  Detected [bold]{len(scan.repos)}[/bold] repositories in {scan.root}\n")
+    # --yes, --all or a non-terminal stdin take every detected repo (and the
+    # first as primary) without prompting: asking a pipe would end the run with
+    # an EOFError before anything was done, and "every repo" is what --all means.
+    picked = _select_workspace_repos(scan, select_all=select_all)
+    return None if picked is None else (*picked, None)
 
 
 def _select_workspace_repos(scan: Any, *, select_all: bool) -> tuple[list[Any], str] | None:
