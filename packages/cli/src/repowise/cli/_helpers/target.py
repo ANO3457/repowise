@@ -327,3 +327,25 @@ def resolve_command_target(
         reason="no workspace nearby",
         auto_detected=False,
     )
+
+
+def cross_repo_cut_inputs(repo_path: Path, ws_root: Path | None) -> dict[str, Any]:
+    """``lookup`` and ``alias`` for the dead-code cross-repo cut (``serve_findings``)
+    on *repo_path*, a member of the workspace at *ws_root*; both ``None`` when
+    there is no workspace or the repo is not one of its members."""
+    none: dict[str, Any] = {"lookup": None, "alias": None}
+    if ws_root is None:
+        return none
+    import yaml
+
+    from repowise.core.workspace.config import WorkspaceConfig
+
+    try:
+        alias = WorkspaceConfig.load(ws_root).alias_for_path(ws_root, repo_path)
+    except (OSError, ValueError, yaml.YAMLError):  # an unreadable config cuts nothing
+        return none
+    if alias is None:
+        return none
+    from repowise.server.mcp_server._enrichment import CrossRepoEnricher
+
+    return {"lookup": CrossRepoEnricher.for_workspace(ws_root), "alias": alias}

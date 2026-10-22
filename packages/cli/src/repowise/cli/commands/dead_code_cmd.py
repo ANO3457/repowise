@@ -12,6 +12,7 @@ from rich.table import Table
 
 from repowise.cli.helpers import (
     console,
+    cross_repo_cut_inputs,
     get_head_commit,
     load_config,
     load_state,
@@ -154,27 +155,6 @@ def _analyze_live(repo_path: Path, config: dict, notices: Any) -> DeadCodeReport
         dotnet_index=getattr(graph_builder, "dotnet_index", None),
     )
     return analyzer.analyze(config)
-
-
-def _cross_repo_inputs(
-    target: Any, repo_path: Path, no_workspace: bool
-) -> tuple[CrossRepoLookup | None, str | None]:
-    """The workspace data and alias the cross-repo cut reads for *repo_path*."""
-    if no_workspace or target.ws_root is None:
-        return None, None
-    from repowise.core.workspace.config import WorkspaceConfig
-
-    ws_config = target.ws_config or WorkspaceConfig.load(target.ws_root)
-    resolved = repo_path.resolve()
-    alias = next(
-        (e.alias for e in ws_config.repos if (target.ws_root / e.path).resolve() == resolved),
-        None,
-    )
-    if alias is None:
-        return None, None
-    from repowise.server.mcp_server._enrichment import CrossRepoEnricher
-
-    return CrossRepoEnricher.for_workspace(target.ws_root), alias
 
 
 def _with_cut(served: ServedFinding) -> DeadCodeFindingData:
@@ -352,9 +332,8 @@ def dead_code_command(
         report = _analyze_live(repo_path, config, notices)
     else:
         _notice_stored(repo_path, notices)
-    report, touched = _cut_cross_repo(
-        report, *_cross_repo_inputs(target, repo_path, no_workspace), min_confidence
-    )
+    cut = cross_repo_cut_inputs(repo_path, None if no_workspace else target.ws_root)
+    report, touched = _cut_cross_repo(report, cut["lookup"], cut["alias"], min_confidence)
     if touched:
         notices.print(
             f"[dim]{touched} finding(s) not cleanup-ready: another workspace repo may use "

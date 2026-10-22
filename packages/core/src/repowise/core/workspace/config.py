@@ -396,6 +396,12 @@ class WorkspaceConfig:
         """Return all repo aliases in order."""
         return [r.alias for r in self.repos]
 
+    def alias_for_path(self, workspace_root: Path, repo_path: Path | str) -> str | None:
+        """The alias of the member checked out at *repo_path*, or ``None``."""
+        target = Path(repo_path).resolve()
+        root = Path(workspace_root)
+        return next((e.alias for e in self.repos if (root / e.path).resolve() == target), None)
+
     # ------------------------------------------------------------------
     # Mutation helpers
     # ------------------------------------------------------------------
