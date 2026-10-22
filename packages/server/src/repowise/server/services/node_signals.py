@@ -66,7 +66,9 @@ async def collect_node_signals(
     """Join git metadata, dead-code findings, decisions, and docs into one map.
 
     Dead-code confidence is served (:func:`serve_findings`): in a workspace,
-    *lookup* and *alias* apply the cross-repo cut.
+    *lookup* and *alias* apply the cross-repo cut. It never drops a finding,
+    so ``is_dead`` is the same without it: a caller that only counts dead
+    files needs no cut.
 
     When *node_ids* is provided, queries are scoped to that subset; otherwise
     we fetch repo-wide. Returns ``{node_id: NodeSignals}``. Missing keys imply

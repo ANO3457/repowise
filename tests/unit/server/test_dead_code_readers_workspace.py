@@ -174,6 +174,57 @@ async def test_core_readers_take_the_cut(session_factory) -> None:
 
         signals = await collect_node_signals(session, rid, [CONTRACT_PATH], **CUT)
         assert signals[CONTRACT_PATH].dead_confidence == 0.27
+        # Dead-file counts (module, architecture, community) read is_dead only.
+        uncut = await collect_node_signals(session, rid, [CONTRACT_PATH])
+        assert uncut[CONTRACT_PATH].is_dead is signals[CONTRACT_PATH].is_dead is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("cut", [{}, CUT], ids=["single repo", "workspace"])
+async def test_a_snapshot_that_took_the_stored_flag_is_not_served(
+    session_factory, monkeypatch, cut
+) -> None:
+    """A row stored safe below the confidence bar, counted by a snapshot built
+    from the stored flag, never reaches Do next."""
+    from repowise.core.analysis.actions import build
+    from repowise.core.persistence.crud.analysis.actions import (
+        _KEY,
+        SNAPSHOT_KIND,
+        load_actions_view,
+        write_actions_snapshot,
+    )
+    from repowise.core.persistence.read_snapshots import read_snapshot
+    from tests.unit.persistence.helpers import insert_repo
+
+    async with get_session(session_factory) as session:
+        rid = (await insert_repo(session)).id
+        await crud.save_dead_code_findings(
+            session,
+            rid,
+            [
+                {
+                    "kind": "unused_export",
+                    "file_path": "src/legacy.py",
+                    "symbol_name": "legacy",
+                    "symbol_kind": "function",
+                    "confidence": 0.5,
+                    "reason": "No callers",
+                    "lines": 40,
+                    "start_line": 1,
+                    "end_line": 40,
+                    "safe_to_delete": True,
+                }
+            ],
+        )
+    with monkeypatch.context() as m:
+        m.setattr(build, "is_safe", lambda r: bool(build.field(r, "safe_to_delete")))
+        async with get_session(session_factory) as session:
+            await write_actions_snapshot(session, rid)
+            stored = await read_snapshot(session, rid, SNAPSHOT_KIND, _KEY)
+            assert "dead_code_batch" in str(stored)
+
+    async with get_session(session_factory) as session:
+        assert _dead_actions(await load_actions_view(session, rid, **cut)) == []
 
 
 @pytest.mark.asyncio

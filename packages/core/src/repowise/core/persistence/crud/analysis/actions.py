@@ -55,7 +55,7 @@ from repowise.core.analysis.actions.facts import MOCKED_ONLY_VIA, FileFacts
 from repowise.core.analysis.actions.rules.code import FIX_FIRST_ACTIONS
 from repowise.core.analysis.actions.rules.hygiene import PUBLIC_ENV_KIND, SECRET_KINDS
 from repowise.core.analysis.dead_code.risk_factors import REVIEW_ONLY_KINDS
-from repowise.core.analysis.dead_code.serving import CrossRepoLookup, serve_findings
+from repowise.core.analysis.dead_code.serving import CrossRepoLookup, is_safe, serve_findings
 from repowise.core.analysis.finding_registry import excluded_types
 from repowise.core.analysis.test_reachability import any_tests_reaching
 
@@ -419,17 +419,17 @@ async def _dead(
     return build_dead(served, files)
 
 
-async def _cut_withdraws_stored(
+async def _stored_dead_overstated(
     session: AsyncSession, repo_id: str, lookup: CrossRepoLookup | None, alias: str | None
 ) -> bool:
-    """Whether the cross-repo cut withdraws a finding the snapshot counted as safe.
+    """Whether a finding stored deletion-ready reads not safe as served.
 
-    The snapshot is written per repository, without the workspace's cut.
+    A snapshot may count it: the snapshot is written without the workspace's
+    cut, and one built before ``build_dead`` re-derived readiness took the
+    stored flag.
     """
-    if lookup is None or not alias:
-        return False
     rows = await _stored_safe_dead(session, repo_id)
-    return any(f.cross_repo_note for f in serve_findings(rows, lookup, alias))
+    return not all(is_safe(f) for f in serve_findings(rows, lookup, alias))
 
 
 async def _decisions(session: AsyncSession, repo_id: str) -> dict[str, Any]:
@@ -681,9 +681,9 @@ async def load_actions_view(
     """The one entry point: the rules' output, the person's answers, and the ranked view.
 
     The rules' output is the stored snapshot while it is current, else built
-    from the facts here. In a workspace (*lookup*, *alias*), a snapshot that
-    counts a finding the cross-repo cut withdraws is built live instead.
-    Never writes.
+    from the facts here. While a finding stored deletion-ready reads not safe
+    as served (in a workspace, *lookup* and *alias* apply the cross-repo cut),
+    the view is built live instead. Never writes.
     """
     try:
         async with session.begin_nested():
@@ -691,9 +691,9 @@ async def load_actions_view(
     except Exception:
         states = {}
     when = now or datetime.now(UTC)
-    stored = None
-    if not await _cut_withdraws_stored(session, repo_id, lookup, alias):
-        stored = await read_snapshot(session, repo_id, SNAPSHOT_KIND, _KEY)
+    stored = await read_snapshot(session, repo_id, SNAPSHOT_KIND, _KEY)
+    if stored is not None and await _stored_dead_overstated(session, repo_id, lookup, alias):
+        stored = None
     view = _stored_view(stored, states, when)
     if view is None:
         view = _view(await _ruled(session, repo_id, lookup, alias), states, when)
