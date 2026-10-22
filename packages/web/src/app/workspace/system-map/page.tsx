@@ -151,12 +151,14 @@ export default function SystemMapPage() {
 
   // Repo health by alias; the repo graph's node `name` is the alias.
   const { healthByRepo, repoIdByAlias } = useMemo(() => {
-    const health = new Map<string, RepoHealth>();
-    const ids = new Map<string, string>();
-    for (const n of repoGraph?.nodes ?? []) {
-      health.set(n.name, { score: n.health_score, source: n.health_score_source });
-      ids.set(n.name, n.repo_id);
-    }
+    const nodes = repoGraph?.nodes ?? [];
+    // An unscored repo has no entry, so its nodes read "No health score".
+    const health = new Map<string, RepoHealth>(
+      nodes.flatMap((n) =>
+        n.health_score == null ? [] : [[n.name, { score: n.health_score }] as const],
+      ),
+    );
+    const ids = new Map<string, string>(nodes.map((n) => [n.name, n.repo_id]));
     return { healthByRepo: health, repoIdByAlias: ids };
   }, [repoGraph]);
 
