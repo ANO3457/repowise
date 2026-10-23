@@ -338,15 +338,34 @@ def _is_vendored_path(lowered_name: str, dirs: list[str]) -> bool:
         return True
     if _DEPS_DIR in dirs[:-1] and lowered_name.endswith(_deps_suffixes()):
         return True
-    return lowered_name.endswith(_MINIFIED_SUFFIXES)
+    return lowered_name.endswith(_MINIFIED_SUFFIXES) or _in_static_release_dir(dirs)
+
+
+# A library unpacked under its release name in a static resource
+# (``staticresources/arbor-v0.92/``). Elsewhere a versioned folder is as often an
+# API version or the repository's own release. Ceiling: a team's own resource
+# folder named like a release (``app-v2.1/``) reads as vendored too.
+_RELEASE_DIR_RE = re.compile(r"^[a-z][\w.-]*?[-_.]v?\d+(?:\.\d+)+$")
+
+
+def _in_static_release_dir(dirs: list[str]) -> bool:
+    for i, d in enumerate(dirs):
+        if d in _STATIC_RESOURCE_DIRS:
+            return any(_RELEASE_DIR_RE.match(s) for s in dirs[i + 1 :])
+    return False
 
 
 # A copied library is recognisable by its header only in the directories a
 # site serves assets from. Anywhere else a license header is far more often
 # the repository's own.
 # ``min/`` is a minified distribution tree (Monaco ships as ``min/vs/...``); the
-# header rule below keeps a first-party ``src/min/`` out.
-_ASSET_DIR_TOKENS = frozenset({"docs", "doc", "static", "assets", "public", "_static", "min"})
+# header rule below keeps a first-party ``src/min/`` out. Salesforce serves its
+# static resources by name, and NPSP-style repos keep their sources in a mirror.
+_STATIC_RESOURCE_DIRS = frozenset({"staticresources", "staticresourcesources"})
+_ASSET_DIR_TOKENS = (
+    frozenset({"docs", "doc", "static", "assets", "public", "_static", "min"})
+    | _STATIC_RESOURCE_DIRS
+)
 _HEADER_LINES = 20
 _LICENSE_RE = re.compile(
     r"copyright|\(c\)|©|@license|licen[cs]ed\s+under|released\s+under|\bMIT\b",

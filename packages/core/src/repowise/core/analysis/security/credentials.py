@@ -46,10 +46,14 @@ def _is_valid_credential_value(val: str) -> bool:
 # is a key's or marker's name, a constant holding its own name, and a template
 # placeholder or shell substitution is filled in when it runs; none of them is a
 # credential. Letters only: a digit or capital makes it look like a key.
-_TEMPLATE_VALUE = re.compile(r"\{\{.*?\}\}|\$\{.*?\}|\$\(.*?\)")
+# ``{!Contact.Name}`` is a Salesforce merge field (Visualforce, formulas, flows,
+# email templates) and ``{#v.value}`` an Aura unbound expression.
+_TEMPLATE_VALUE = re.compile(r"\{\{.*?\}\}|\$\{.*?\}|\$\(.*?\)|\{[!#].*?\}")
 _SCHEME_TEMPLATE_VALUE = re.compile(
     r"(?i:(?:bearer|basic|token))\s+(?:\{\{.*?\}\}|\$\{.*?\}|\$\(.*?\))"
 )
+# A character range with a quantifier is a regular expression (``(_D[0-9]+D_)``).
+_REGEX_VALUE = re.compile(r"\[\^?[^\]]*\w-\w[^\]]*\][+*?{]")
 _OWN_NAME_VALUE = re.compile(r"[A-Za-z_-]+")
 _CONSTANT_NAME = re.compile(r"[A-Z][A-Z0-9_]*")
 _KEY_NAME_VALUE = re.compile(r"[a-z]+(?:[_-][a-z]+)+|[a-z_]*_[a-z_]*")
@@ -110,6 +114,7 @@ def _is_secret_value(kind: str, val: str, name: str = "") -> bool:
     return not (
         _TEMPLATE_VALUE.search(value)
         or _SCHEME_TEMPLATE_VALUE.search(value)
+        or _REGEX_VALUE.search(value)
         or _is_plain_word(value)
         or value.startswith("--")
     )

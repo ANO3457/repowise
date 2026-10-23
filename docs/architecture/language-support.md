@@ -991,6 +991,12 @@ Lightning or project file writes its name in any case, strings included, since
 `Type.forName` reaches classes by name. Ceiling: a mention in a comment counts as
 a use, and a class shaped like a Visualforce controller stays live.
 
+A static resource (`staticresources/`, or an NPSP-style `StaticResourceSources/`
+mirror) is vendored when it sits in a library's release folder (`arbor-v0.92/`)
+or opens with another project's versioned license banner. Ceiling: a library
+copied with neither, such as a minified Google client with no banner, stays
+production.
+
 #### Lightning Web Components, Aura and Visualforce
 
 LWC, Aura, Visualforce and flows reach Apex classes by the same rules from the

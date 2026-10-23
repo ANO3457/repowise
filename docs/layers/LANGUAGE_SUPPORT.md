@@ -115,7 +115,7 @@ paragraph of its own `PERFORM THRU` range; it never deducts from a score.
 A paragraph whose performer is in another file (a copybook's) is judged by the
 target's name alone.
 Apex dead-code findings are review-only, since the platform also reaches classes
-by name.
+by name. A third-party library in a static resource counts as vendored.
 
 ## How accurate is the graph per language
 
