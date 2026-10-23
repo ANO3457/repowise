@@ -804,7 +804,7 @@ class FileTraverser:
             return "skipped_dir_ignore"
         if self._blocked_patterns.match_file(rel_str):
             return "skipped_blocked_pattern"
-        if _is_repowise_output(abs_path, rel_str):
+        if is_repowise_output(abs_path, rel_str):
             return "skipped_repowise_output"
         return None
 
@@ -1813,11 +1813,16 @@ def in_blocked_dir(
     )
 
 
-def _is_repowise_output(abs_path: Path, rel_str: str) -> bool:
+def is_repowise_output(
+    abs_path: Path, rel_str: str, committed: Callable[[], str] | None = None
+) -> bool:
     """Whether repowise wrote the whole file: an owned path, or a shared one holding only its part.
 
     A shared file (``CLAUDE.md``, ``.mcp.json``) with anything the user wrote
     stays indexed, repowise's block included, since the user's part is theirs.
+    *committed* returns the file's text at ``HEAD``, so a working-tree check
+    can tell repowise's refresh of a tracked file from the user's edit; it is
+    only called for a managed file.
     """
     if _OWNED_SPEC.match_file(rel_str):
         return True
@@ -1827,7 +1832,7 @@ def _is_repowise_output(abs_path: Path, rel_str: str) -> bool:
         text = abs_path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
         return False
-    return only_repowise_differs(rel_str, "", text)
+    return only_repowise_differs(rel_str, committed() if committed else "", text)
 
 
 def is_candidate_source_path(

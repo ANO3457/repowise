@@ -45,7 +45,7 @@ Grouped by task; `PATH` and flags are in each command's section.
   [`hook health-gate`](#repowise-hook-health-gate-installuninstallstatus), [`augment`](#repowise-augment)
 - **Server:** [`serve`](#repowise-serve-path), [`mcp`](#repowise-mcp-path)
 - **Workspace:** [`workspace list`](#repowise-workspace-list), [`workspace add`](#repowise-workspace-add-path),
-  [`workspace remove`](#repowise-workspace-remove-alias), [`workspace scan`](#repowise-workspace-scan-path), [`workspace
+  [`workspace remove`](#repowise-workspace-remove-alias), [`workspace scan`](#repowise-workspace-scan-path), [`workspace update`](#repowise-workspace-update), [`workspace
   set-default`](#repowise-workspace-set-default-alias), [`workspace diagnostics`](#repowise-workspace-diagnostics),
   [`workspace check`](#repowise-workspace-check), [`workspace metrics`](#repowise-workspace-metrics-path), [`workspace
   impacted-tests`](#repowise-workspace-impacted-tests-repopath)
@@ -1726,6 +1726,14 @@ repowise workspace scan --yes
 | `--yes` / `-y` | Add all without prompting. | off |
 | `--exclude` | Skip paths matching this glob, relative to the workspace root (e.g. `'test-repos/*'`). Repeatable. | |
 | `--verbose`, `-v` | Debug logs. | off |
+
+### `repowise workspace update`
+
+The same command as `repowise update --workspace`, with the same flags. It updates the stale repos, then re-runs the cross-repo analysis when a repo changed or the `contracts:` or `conformance:` settings did.
+
+```bash
+repowise workspace update --index-only
+```
 
 ### `repowise workspace set-default <alias>`
 

@@ -39,7 +39,7 @@ from ...ingestion.git_indexer import (
 )
 from ...ingestion.git_indexer._constants import _DEFAULT_COMMIT_LIMIT
 from ..config import RepoEntry, WorkspaceConfig
-from .phases import run_cross_repo_hooks
+from .phases import analysis_config_changed, run_cross_repo_hooks
 from .repo import RepoUpdateResult, _has_persisted_repo_index, update_single_repo_index
 from .state import (
     check_repo_staleness,
@@ -126,7 +126,10 @@ async def update_workspace(
     sync_workspace_state_from_disk(workspace_root, ws_config)
 
     stale_repos = await _select_stale_repos(workspace_root, entries, include_working_tree, results)
-    if dry_run or not stale_repos:
+    # An edited contracts: or conformance: block is work too, with no repo stale.
+    if dry_run or not (
+        stale_repos or (run_hooks and analysis_config_changed(ws_config, workspace_root))
+    ):
         return results
 
     # Workspace single-flight: concurrent hook-triggered passes defer to the
@@ -134,6 +137,8 @@ async def update_workspace(
     # running pass rolls forward instead of a second full pass starting.
     workspace_owner = _try_acquire_workspace_lock(workspace_root)
     if workspace_owner is not None:
+        if not stale_repos:
+            return results
         return _defer_to_running_workspace_update(workspace_owner, stale_repos)
 
     # The workspace lock is held until every member has been attempted.
@@ -464,11 +469,14 @@ async def _finish_workspace_pass(
     changed_aliases: list[str],
     run_hooks: bool,
 ) -> None:
-    """Save the updated workspace config, then run the cross-repo hooks."""
+    """Save the updated workspace config, then run the cross-repo hooks.
+
+    The hooks run when a repo changed or the cross-repo settings did.
+    """
     if changed_aliases:
         ws_config.save(workspace_root)
 
     # ``run_hooks`` lets the CLI defer these so they run once over the union
     # of index-only and docs repos, rather than on this partial set.
-    if changed_aliases and run_hooks:
+    if run_hooks and (changed_aliases or analysis_config_changed(ws_config, workspace_root)):
         await run_cross_repo_hooks(ws_config, workspace_root, changed_aliases)
