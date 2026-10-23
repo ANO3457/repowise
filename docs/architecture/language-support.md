@@ -1002,6 +1002,14 @@ both settles a name two files declare and refuses a class that merely shadows a
 framework widget. A class reached through an `export` barrel is missed, which
 costs an edge rather than inventing one.
 
+### Lightning Web Components
+
+Inside an `lwc/<name>/` bundle, `c/<name>` imports resolve to that bundle's
+main module and `@salesforce/apex/Cls.method` imports to the Apex method.
+Templates link to child components by tag and to their own class's members by
+`{binding}`, `@wire` binds its Apex method, and an exposed bundle is an entry
+point. A name two sfdx projects declare goes to the nearer one; a tie gets no edge.
+
 ### Known gaps per language
 
 - **Template dialects are invisible.** Django/Jinja, Go templates, ERB,
