@@ -986,6 +986,14 @@ Salesforce CLI coverage names a class or trigger, never a file, so it maps to
 the one `.cls` or `.trigger` file of that name, ignoring case. A name two files
 share, or no file has, stays unmapped.
 
+Each flow (`.flow-meta.xml`, or a legacy `.flow` in a `flows/` directory) is
+one symbol named by its API name, linked to the Apex invocable actions,
+subflows, screen components and Apex-defined types it names. Apex
+`Flow.Interview` references and LWC `<lightning-flow>` tags with a literal name
+link back to it. Flexipages, quick actions, tabs, email services and Experience
+sites mark what they name as live; names in another package's namespace are not
+followed.
+
 ### Salesforce Visualforce
 
 Pages and components link the Apex classes their `controller=` and
