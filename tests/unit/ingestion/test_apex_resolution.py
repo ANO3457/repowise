@@ -308,3 +308,148 @@ def test_a_property_is_never_the_callee(tmp_path: Path) -> None:
     })
     calls = _calls(_build(tmp_path), _id("Caller.cls", "Caller::go"))
     assert calls == {_id("Base.cls", "Base::status"): "receiver_same_package"}
+
+
+def _with_dependency(root: Path, files: dict[str, str], package: str, depends_on: str) -> None:
+    _project(root, files)
+    manifest = {
+        "packageDirectories": [
+            {
+                "path": "force-app",
+                "package": package,
+                "dependencies": [{"package": f"{depends_on}@1.0.0-0"}] if depends_on else [],
+            }
+        ],
+        "namespace": "",
+    }
+    (root / "sfdx-project.json").write_text(json.dumps(manifest))
+
+
+def test_another_project_is_reached_only_through_a_dependency(tmp_path: Path) -> None:
+    base = "public virtual class Base {\n    public static void help() {}\n}\n"
+    child = (
+        "public class Child extends Base {\n"
+        "    void go() { Base.help(); }\n"
+        "}\n"
+    )
+    _with_dependency(tmp_path / "base", {"Base.cls": base}, "BasePack", "")
+    _with_dependency(tmp_path / "uses", {"Child.cls": child}, "Uses", "BasePack")
+    _with_dependency(tmp_path / "other", {"Child.cls": child}, "Other", "")
+    graph = _build(tmp_path)
+    base_id = _id("Base.cls", "Base", "base")
+    assert graph.has_edge(_id("Child.cls", "Child", "uses"), base_id)
+    assert _calls(graph, _id("Child.cls", "Child::go", "uses")) == {
+        _id("Base.cls", "Base::help", "base"): "receiver_same_package"
+    }
+    # No declared dependency: no heritage edge and no call edge across projects.
+    assert not graph.has_edge(_id("Child.cls", "Child", "other"), base_id)
+    assert _calls(graph, _id("Child.cls", "Child::go", "other")) == {}
+
+
+def test_a_namespaced_project_is_reached_through_its_prefix(tmp_path: Path) -> None:
+    _project(tmp_path / "base", {"Util.cls": "public class Util {\n    public static void help() {}\n}\n"}, namespace="usf3")
+    _project(tmp_path / "uses", {
+        "Caller.cls": "public class Caller {\n    void go() { usf3.Util.help(); Util.help(); }\n}\n",
+    })
+    calls = _calls(_build(tmp_path), _id("Caller.cls", "Caller::go", "uses"))
+    assert calls == {_id("Util.cls", "Util::help", "base"): "receiver_same_package"}
+
+
+def test_an_exact_argument_type_decides_only_when_no_other_overload_could_take_it(
+    tmp_path: Path,
+) -> None:
+    _project(tmp_path, {
+        "Log.cls": (
+            "public class Log {\n"
+            "    public static void add(Exception error, Long code) {}\n"
+            "    public static void add(String message, Integer level) {}\n"
+            "    public static void put(Id record, Account owner) {}\n"
+            "    public static void put(String name, Integer level) {}\n"
+            "    public static void link(Account owner, String note) {}\n"
+            "    public static void link(Contact person, Integer rank) {}\n"
+            "}\n"
+        ),
+        "Caller.cls": (
+            "public class Caller {\n"
+            "    void go(String name, Contact person) {\n"
+            "        Log.add('x', unknown);\n"
+            "        Log.put(name, unknown);\n"
+            "        Log.link(person, unknown);\n"
+            "    }\n"
+            "}\n"
+        ),
+    })
+    calls = _calls(_build(tmp_path), _id("Caller.cls", "Caller::go"))
+    # A String never becomes an Exception, so ``add`` is chosen; it may become
+    # an Id, so the untyped argument could still mean the first ``put``, which
+    # stands for the set.
+    assert set(calls) == {
+        _id("Log.cls", "Log::add#2(String,Integer)"),
+        _id("Log.cls", "Log::put#2(Id,Account)"),
+        # One sObject never stands for another, so the Contact member is chosen.
+        _id("Log.cls", "Log::link#2(Contact,Integer)"),
+    }
+
+
+def test_a_variable_in_another_case_and_a_builtin_named_member_type(tmp_path: Path) -> None:
+    _project(tmp_path, {
+        "Plugin.cls": (
+            "public class Plugin {\n"
+            "    public interface Batchable { void start(); }\n"
+            "    public void run() {}\n"
+            "}\n"
+        ),
+        "Caller.cls": (
+            "public class Caller {\n"
+            "    void go(Plugin.Batchable batch) {\n"
+            "        Plugin worker = new Plugin();\n"
+            "        WORKER.run();\n"
+            "        batch.start();\n"
+            "    }\n"
+            "}\n"
+        ),
+    })
+    calls = _calls(_build(tmp_path), _id("Caller.cls", "Caller::go"))
+    assert calls[_id("Plugin.cls", "Plugin::run")] == "receiver_typed_same_package"
+    assert calls[_id("Plugin.cls", "Batchable::start")] == "receiver_typed_same_package"
+
+
+def test_a_qualified_parent_is_read_through_its_outer_type(tmp_path: Path) -> None:
+    _project(tmp_path, {
+        "Metadata.cls": "public class Metadata {\n    public virtual class FlowNode {}\n}\n",
+        "Other.cls": "public class Other {}\n",
+        "Right.cls": "public class Right extends Metadata.FlowNode {}\n",
+        "Wrong.cls": "public class Wrong extends Other.FlowNode {}\n",
+        "Managed.cls": "public class Managed extends pkg.Outer.FlowNode {}\n",
+    })
+    graph = _build(tmp_path)
+    flow_node = _id("Metadata.cls", "Metadata::FlowNode")
+    assert graph.has_edge(_id("Right.cls", "Right"), flow_node)
+    assert not graph.has_edge(_id("Wrong.cls", "Wrong"), flow_node)
+    assert not graph.has_edge(_id("Managed.cls", "Managed"), flow_node)
+
+
+def test_the_own_namespace_prefix_never_reaches_a_dependency(tmp_path: Path) -> None:
+    util = "public class Util {\n    public static void help() {}\n}\n"
+    _with_dependency(tmp_path / "base", {"Util.cls": util}, "BasePack", "")
+    _with_dependency(
+        tmp_path / "uses",
+        {
+            "Caller.cls": (
+                "public class Caller {\n"
+                "    void prefixed() { acme.Util.help(); }\n"
+                "    void bare() { Util.help(); }\n"
+                "}\n"
+            )
+        },
+        "Uses",
+        "BasePack",
+    )
+    manifest = tmp_path / "uses" / "sfdx-project.json"
+    manifest.write_text(manifest.read_text().replace('"namespace": ""', '"namespace": "acme"'))
+    graph = _build(tmp_path)
+    # Only the unprefixed call reaches the dependency's class.
+    assert _calls(graph, _id("Caller.cls", "Caller::prefixed", "uses")) == {}
+    assert _calls(graph, _id("Caller.cls", "Caller::bare", "uses")) == {
+        _id("Util.cls", "Util::help", "base"): "receiver_same_package"
+    }
