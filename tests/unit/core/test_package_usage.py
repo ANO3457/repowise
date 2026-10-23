@@ -81,6 +81,18 @@ def test_parse_query():
     assert parse_query("com.google:guava") == ("com.google:guava", None)
 
 
+def test_a_maven_coordinate_answers_to_its_artifact_id():
+    from repowise.core.inventory.usage import Declaration, UsageIndex
+
+    web = Declaration(1, "maven", "org.springframework.boot:spring-boot-starter-web", None, "build.gradle", False)
+    index = UsageIndex(declarations=[web])
+    assert index.match("spring-boot-starter-web")[0] == [web]
+    assert index.match("Spring-Boot-Starter-Web", "maven")[0] == [web]
+    assert index.match("org.springframework.boot:spring-boot-starter-web")[0] == [web]
+    assert index.match("spring-boot")[0] == []
+    assert index.match("spring-boot-starter-web", "npm")[0] == []
+
+
 async def test_component_inventory(session, tmp_path):  # noqa: F811
     inv = await component_inventory(session, REPO, tmp_path)
     comps = {c["name"]: c for c in inv["components"]}
