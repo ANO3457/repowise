@@ -56,11 +56,7 @@ def test_render_never_references_repowise_repo_paths(gen):
 
     data = _full_health(_health_block(6.4))
     result = gen.render(data)
-    for repo_relative in (
-        "docs/layers/CODE_HEALTH.md",
-        "docs/agent/MCP_TOOLS.md",
-        "docs/agent/DISTILL.md",
-    ):
+    for repo_relative in ("docs/layers/CODE_HEALTH.md", "docs/agent/MCP_TOOLS.md", "docs/agent/DISTILL.md"):
         assert repo_relative not in result
 
 
@@ -335,7 +331,9 @@ def test_render_surfaces_performance_when_present(gen):
     result = gen.render(data)
     # Leads with the causes worth fixing now, production and overall as context;
     # the bounded [9,10] average and coverage % are deliberately not rendered.
-    assert "performance 1 cause worth fixing now (7 open in production code, 12 overall)" in result
+    assert (
+        "performance 1 cause worth fixing now (7 open in production code, 12 overall)" in result
+    )
     assert "N+1" not in result
 
 
