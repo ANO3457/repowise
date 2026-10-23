@@ -114,6 +114,20 @@ def _is_trailer(line: str, in_final_paragraph: bool) -> bool:
     return in_final_paragraph or key.endswith("-by") or key in _KNOWN_TRAILERS
 
 
+def _body_title(body: str) -> str | None:
+    """A merge body's first line that is neither a trailer nor git's own text."""
+    lines = [line.strip() for line in body.strip().splitlines()]
+    # Git keeps trailers in the final paragraph; a body of one paragraph is
+    # the title (``fix: x``), save a known trailer such as ``Signed-off-by``.
+    final = next((i for i in range(len(lines) - 1, 0, -1) if not lines[i - 1] and lines[i]), 0)
+    for i, line in enumerate(lines):
+        if line in ("Conflicts:", "# Conflicts:"):
+            return None  # git's conflict list, kept when a merge commit is not edited
+        if line and not line.startswith(_GITLAB_MERGE_REF) and not _is_trailer(line, 0 < final <= i):
+            return line
+    return None
+
+
 def change_title(subject: str, body: str, is_merge: bool) -> str:
     """The change's title: a merge's own boilerplate subject gives way to its body."""
     if not is_merge:
@@ -121,15 +135,7 @@ def change_title(subject: str, body: str, is_merge: bool) -> str:
     if m := _AZURE_MERGED.match(subject):
         return m.group(1).strip()
     if subject.startswith(_BOILERPLATE_MERGE):
-        lines = [line.strip() for line in body.strip().splitlines()]
-        # Git keeps trailers in the final paragraph; a body of one paragraph is
-        # the title (``fix: x``), save a known trailer such as ``Signed-off-by``.
-        final = next((i for i in range(len(lines) - 1, 0, -1) if not lines[i - 1] and lines[i]), 0)
-        for i, line in enumerate(lines):
-            if line in ("Conflicts:", "# Conflicts:"):
-                break  # git's conflict list, kept when a merge commit is not edited
-            if line and not line.startswith(_GITLAB_MERGE_REF) and not _is_trailer(line, 0 < final <= i):
-                return line
+        return _body_title(body) or subject
     return subject
 
 
