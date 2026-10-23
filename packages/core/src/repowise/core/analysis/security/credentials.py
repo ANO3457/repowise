@@ -52,6 +52,8 @@ _TEMPLATE_VALUE = re.compile(r"\{\{.*?\}\}|\$\{.*?\}|\$\(.*?\)|\{[!#].*?\}")
 _SCHEME_TEMPLATE_VALUE = re.compile(
     r"(?i:(?:bearer|basic|token))\s+(?:\{\{.*?\}\}|\$\{.*?\}|\$\(.*?\))"
 )
+# A character class with a quantifier is a regular expression (``(_D[0-9]+D_)``).
+_REGEX_VALUE = re.compile(r"\[[^\]]+\][+*?{]")
 _OWN_NAME_VALUE = re.compile(r"[A-Za-z_-]+")
 _CONSTANT_NAME = re.compile(r"[A-Z][A-Z0-9_]*")
 _KEY_NAME_VALUE = re.compile(r"[a-z]+(?:[_-][a-z]+)+|[a-z_]*_[a-z_]*")
@@ -112,6 +114,7 @@ def _is_secret_value(kind: str, val: str, name: str = "") -> bool:
     return not (
         _TEMPLATE_VALUE.search(value)
         or _SCHEME_TEMPLATE_VALUE.search(value)
+        or _REGEX_VALUE.search(value)
         or _is_plain_word(value)
         or value.startswith("--")
     )

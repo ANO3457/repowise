@@ -1441,6 +1441,7 @@ class TestSecretPrecision:
             ("pages/Pay.page", '<c:pay accessToken="{!$Credential.OAuthToken}"/>\n'),
             ("aura/Pay/Pay.cmp", '<c:pay token="{#v.sessionToken}"/>\n'),
             ("classes/Api.cls", "String token = 'Bearer {!$Credential.OAuthToken}';\n"),
+            ("classes/RegExps.cls", "static final String EXP_NUMBER_TOKEN = '(_D[0-9]+D_)';\n"),
         ],
     )
     def test_elided_or_templated_values_are_not_secrets(self, path: str, source: str) -> None:
