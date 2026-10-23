@@ -56,7 +56,11 @@ def test_render_never_references_repowise_repo_paths(gen):
 
     data = _full_health(_health_block(6.4))
     result = gen.render(data)
-    for repo_relative in ("docs/layers/CODE_HEALTH.md", "docs/agent/MCP_TOOLS.md", "docs/agent/DISTILL.md"):
+    for repo_relative in (
+        "docs/layers/CODE_HEALTH.md",
+        "docs/agent/MCP_TOOLS.md",
+        "docs/agent/DISTILL.md",
+    ):
         assert repo_relative not in result
 
 
@@ -331,9 +335,7 @@ def test_render_surfaces_performance_when_present(gen):
     result = gen.render(data)
     # Leads with the causes worth fixing now, production and overall as context;
     # the bounded [9,10] average and coverage % are deliberately not rendered.
-    assert (
-        "performance 1 cause worth fixing now (7 open in production code, 12 overall)" in result
-    )
+    assert "performance 1 cause worth fixing now (7 open in production code, 12 overall)" in result
     assert "N+1" not in result
 
 
@@ -410,6 +412,47 @@ def test_write_replaces_between_markers(gen, tmp_path):
     assert "User section." in new_content
     assert "Old managed content." not in new_content
     assert "test-repo" in new_content  # new managed content present
+
+
+@pytest.mark.parametrize("title", [r"C:\Users\x", r"C:\new\tools", r"\1", r"\g<0>"])
+@pytest.mark.parametrize("existing_kind", ["marked", "unmarked", "absent"])
+@pytest.mark.parametrize("method", ["write", "render_full"])
+def test_managed_rewrite_preserves_literal_backslashes(
+    any_gen, tmp_path, title, existing_kind, method
+):
+    from dataclasses import replace
+
+    from repowise.core.generation.editor_files.data import DecisionSummary
+
+    data = replace(
+        _minimal_data(),
+        decisions=[DecisionSummary(title=title, status="active", rationale="Keep literal text.")],
+    )
+    start = any_gen.MARKER_START_FMT.format(tag=any_gen.marker_tag)
+    end = any_gen.MARKER_END_FMT.format(tag=any_gen.marker_tag)
+    prefix = "# User notes\nKeep this.\n\n"
+    suffix = "\n\nUser footer.\n"
+    target = tmp_path / any_gen.filename
+    rendered = any_gen.render(data)
+    assert title in rendered
+    wrapped = f"{start}\n{rendered}\n{end}"
+    if existing_kind == "marked":
+        target.write_text(f"{prefix}{start}\nold managed text\n{end}{suffix}", encoding="utf-8")
+        expected = prefix + wrapped + suffix
+    elif existing_kind == "unmarked":
+        target.write_text(prefix, encoding="utf-8")
+        expected = prefix.rstrip() + "\n\n" + wrapped + "\n"
+    else:
+        expected = any_gen.user_placeholder + "\n" + wrapped + "\n"
+
+    result = getattr(any_gen, method)(tmp_path, data)
+    actual = result.read_text(encoding="utf-8") if method == "write" else result
+    assert actual == expected
+    any_gen.write(tmp_path, data)
+    assert target.read_text(encoding="utf-8") == expected
+    assert any_gen.render_full(tmp_path, data) == expected
+    any_gen.write(tmp_path, data)
+    assert target.read_text(encoding="utf-8") == expected
 
 
 def test_write_replaces_only_managed_section(gen, tmp_path):
