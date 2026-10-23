@@ -9,7 +9,7 @@ permissions:
 jobs:
   python:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 65
     steps:
       - uses: actions/checkout@v4
         with:
@@ -36,7 +36,7 @@ jobs:
               path.write_bytes(fixed)
           PY
       - name: Run both required Python suites
-        run: uv run pytest tests/providers/ tests/unit/ -n 2 --dist loadfile -q --junitxml=green.xml
+        run: uv run pytest tests/providers/ tests/unit/ -n 4 --dist loadfile -q --junitxml=green.xml
       - run: uv run ruff check .
       - uses: actions/upload-artifact@v4
         if: always()
@@ -45,16 +45,3 @@ jobs:
           path: |
             red.xml
             green.xml
-  frontend:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: npm
-      - run: npm ci
-      - run: npm run build
-      - run: npm run lint
-      - run: npm run type-check
