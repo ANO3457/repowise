@@ -15,7 +15,8 @@ a paragraph is reported when all of these hold:
 * the file holds one program, with no ``DECLARATIVES``, ``ENTRY``,
   ``IGNORE CONDITION`` or ``REPLACE``, and every procedure-division ``COPY``
   (and every ``COPY`` inside those, transitively) resolved and free of
-  ``REPLACING``.
+  ``REPLACING``; a copybook that supplies the division header (a CICS
+  ``COPY CENTRY.``) must be read and hold ``PROCEDURE DIVISION``.
 
 Any doubt drops the paragraph (recall is the price). A finding is low
 confidence and never deletion-ready.
@@ -27,7 +28,12 @@ import re
 from pathlib import PurePosixPath
 from typing import TYPE_CHECKING
 
-from repowise.core.ingestion.cobol import CopyStatement, code_view, copy_statements
+from repowise.core.ingestion.cobol import (
+    CopyStatement,
+    code_view,
+    copy_statements,
+    procedure_division,
+)
 
 from .constants import _is_fixture_path
 from .models import DeadCodeFindingData, DeadCodeKind
@@ -98,10 +104,13 @@ def unreachable_paragraphs(code: str, copied: dict[str, str]) -> list[tuple[str,
 
 def _procedure(code: str, copied: dict[str, str]) -> tuple[int, list[CopyStatement]] | None:
     """Where the procedure division starts and its COPYs, or ``None`` if it is not judged."""
-    divisions = list(_PROCEDURE.finditer(code))
-    if len(divisions) != 1 or _UNSAFE_PROGRAM.search(code):
+    start, header = procedure_division(code)
+    divisions = len(_PROCEDURE.findall(code)) + (header is not None)
+    if divisions != 1 or _UNSAFE_PROGRAM.search(code):
         return None
-    start = divisions[0].end()
+    # A copied header counts only when its member is read and is that header.
+    if header is not None and not _PROCEDURE.match(copied.get(header, "").lstrip()):
+        return None
     line_of_start = code.count("\n", 0, start) + 1
     copies = [c for c in copy_statements(code) if c.line >= line_of_start]
     return (start, copies) if _closed(copies, copied) else None

@@ -29,6 +29,10 @@ _CSD_EXTS = {".csd"}
 _CSD_COMMAND = re.compile(r"^\s*(?:DEFINE|ADD|ALTER|APPEND|COPY|DELETE|LIST|REMOVE)\s", re.I | re.M)
 _NOT_A_PARAGRAPH = {"UNTIL", "VARYING", "WITH", "TEST", "FOREVER", "THRU", "THROUGH"}
 _STRUCTURAL = ("calls", "imports", "framework")
+_NOT_PROCEDURE = (
+    r"^\s*(?:(?:IDENTIFICATION|ID|ENVIRONMENT|DATA)\s+DIVISION|PROGRAM-ID"
+    r"|(?:FILE|WORKING-STORAGE|LOCAL-STORAGE|LINKAGE)\s+SECTION)\s*\."
+)
 
 
 def _walk(root: str) -> dict[str, dict[str, list[str]]]:
@@ -78,6 +82,17 @@ def truth(root: str) -> dict:
     transactions = _csd_truth(root, files, progs, pairs := collections.defaultdict(set))
     paragraphs: set[tuple[str, str]] = set()
     performs: set[tuple[str, str]] = set()
+    # A copybook whose code is the division header (a CICS ``COPY CENTRY.``) opens it too.
+    headers = {
+        stem
+        for stem, rels in cpys.items()
+        for rel in rels
+        if re.match(
+            r"\s*PROCEDURE\s+DIVISION\b",
+            "\n".join(t for _, _, t in _code_lines(os.path.join(root, rel))),
+            re.I,
+        )
+    }
 
     for rels in progs.values():
         for rel in rels:
@@ -86,13 +101,19 @@ def truth(root: str) -> dict:
             own: set[str] = set()
             in_proc = False
             for _, area_a, body in lines:
-                if re.search(r"PROCEDURE\s+DIVISION", body, re.I):
+                copied = re.match(r"\s*COPY\s+'?([A-Z0-9#@$-]+)", body, re.I)
+                if re.search(r"PROCEDURE\s+DIVISION", body, re.I) or (
+                    copied and copied.group(1).upper() in headers
+                ):
                     in_proc = True
                     continue
+                # A nested program's header and data division close the procedure.
+                if re.search(_NOT_PROCEDURE, body, re.I):
+                    in_proc = False
                 if not in_proc:
                     continue
                 m = re.match(r"([A-Z0-9][A-Z0-9-]*)(\s+SECTION)?\s*\.\s*$", body.rstrip(), re.I)
-                if m and area_a != " ":
+                if m and area_a != " " and m.group(1).upper() != "DECLARATIVES":
                     own.add(m.group(1).upper())
             paragraphs |= {(rel, p) for p in own}
             for m in re.finditer(r"\bPERFORM\s+([A-Z0-9][A-Z0-9-]*)", text, re.I):
@@ -230,7 +251,10 @@ def index_view(db: str) -> dict:
     edges = con.execute(
         "select source_node_id, target_node_id, edge_type from graph_edges"
     ).fetchall()
-    symbols = [r for r in nodes.values() if r[1] == "symbol" and r[2] == "cobol"]
+    # The per-file ``__module__`` node is graph plumbing, not a symbol ``wiki_symbols`` holds.
+    symbols = [
+        r for r in nodes.values() if r[1] == "symbol" and r[2] == "cobol" and r[4] != "__module__"
+    ]
     procs = {(r[3], r[4].upper()) for r in symbols if r[5] == "function"}
     same_file_calls: set[tuple[str, str]] = set()
     cross_perform: list[tuple[str, str]] = []
