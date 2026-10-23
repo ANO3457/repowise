@@ -1011,6 +1011,14 @@ link back to it. Flexipages, quick actions, tabs, email services and Experience
 sites mark what they name as live; names in another package's namespace are not
 followed.
 
+Object and field metadata files (`.object-meta.xml`, `.field-meta.xml`,
+`.object`) become object and field symbols. SOQL and SOSL queries, DML
+statements, triggers, literal `Database.query` strings, `.soql` files and lookup
+fields reference them, matched case-insensitively, with one edge to one copy when
+an object is defined in several places (the default package directory first). A
+name with no definition in the repository gets no edge; `getDescribe()` schema
+tokens and `TYPEOF` branches are not read.
+
 ### Salesforce Visualforce
 
 Pages and components link the Apex classes their `controller=` and
