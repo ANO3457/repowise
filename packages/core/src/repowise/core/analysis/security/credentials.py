@@ -52,8 +52,8 @@ _TEMPLATE_VALUE = re.compile(r"\{\{.*?\}\}|\$\{.*?\}|\$\(.*?\)|\{[!#].*?\}")
 _SCHEME_TEMPLATE_VALUE = re.compile(
     r"(?i:(?:bearer|basic|token))\s+(?:\{\{.*?\}\}|\$\{.*?\}|\$\(.*?\))"
 )
-# A character class with a quantifier is a regular expression (``(_D[0-9]+D_)``).
-_REGEX_VALUE = re.compile(r"\[[^\]]+\][+*?{]")
+# A character range with a quantifier is a regular expression (``(_D[0-9]+D_)``).
+_REGEX_VALUE = re.compile(r"\[\^?[^\]]*\w-\w[^\]]*\][+*?{]")
 _OWN_NAME_VALUE = re.compile(r"[A-Za-z_-]+")
 _CONSTANT_NAME = re.compile(r"[A-Z][A-Z0-9_]*")
 _KEY_NAME_VALUE = re.compile(r"[a-z]+(?:[_-][a-z]+)+|[a-z_]*_[a-z_]*")
