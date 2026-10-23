@@ -1003,6 +1003,13 @@ literal-bound loops) and on calls that run once, such as a lazily filled cache.
 Ceiling: `while` loops, `Database.executeBatch` and `System.schedule` are not
 reported, and untested complexity needs measured coverage or a test the graph sees.
 
+Extract Method reads Apex as Java plus its own rules: names are
+case-insensitive, inline SOQL reads only its `:bind` expressions, and
+`switch on ... when` arms and `System.runAs` blocks are understood. Helpers are
+written as Apex methods, static when the host method is. A `break` or
+`continue` inside a `when` arm is modelled conservatively, as a read of the
+loop's names at the switch.
+
 Each flow (`.flow-meta.xml`, or a legacy `.flow` in a `flows/` directory) is
 one symbol named by its API name, linked to the Apex invocable actions,
 subflows, screen components and Apex-defined types it names. Apex
