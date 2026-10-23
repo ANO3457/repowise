@@ -209,3 +209,28 @@ def test_end_program_is_a_paragraph_name_not_a_scope_terminator() -> None:
         "           EXEC CICS RETURN END-EXEC.\n       MAINLINE-EXIT.\n           EXIT.\n"
     )
     assert _unreachable(body) == ["MAINLINE-EXIT"]
+
+
+def test_a_program_whose_procedure_header_is_copied_is_judged() -> None:
+    from repowise.core.analysis.dead_code.cobol_paragraphs import unreachable_paragraphs
+
+    code = (
+        "       IDENTIFICATION DIVISION.\n"
+        "       PROGRAM-ID. CICSPGM.\n"
+        "       DATA DIVISION.\n"
+        "       LINKAGE SECTION.\n"
+        "       01 DFHCOMMAREA PIC X.\n"
+        "       COPY CENTRY.\n"
+        "           PERFORM WORK-PARA.\n"
+        "           GOBACK.\n"
+        "       WORK-PARA.\n"
+        "           GOBACK.\n"
+        "       LOST-PARA.\n"
+        "           EXIT.\n"
+    )
+    header = {"CENTRY": "       PROCEDURE DIVISION.\n"}
+
+    assert unreachable_paragraphs(code, header) == [("LOST-PARA", 11, 12)]
+    # Unresolved, or a member that is not the header: the program is not judged.
+    assert unreachable_paragraphs(code, {}) == []
+    assert unreachable_paragraphs(code, {"CENTRY": "       MOVE 1 TO A.\n"}) == []

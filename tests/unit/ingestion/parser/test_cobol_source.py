@@ -261,3 +261,69 @@ def test_copy_statements_are_found_in_code_and_not_in_comments() -> None:
         ("MEMBER1", "MYLIB", 10, False, False),
         ("DCLTRTYP", None, 12, False, True),
     ]
+
+
+def _centry_program(after_linkage: str) -> bytes:
+    lines = [
+        "       IDENTIFICATION DIVISION.",
+        "       PROGRAM-ID. DEMO.",
+        "       DATA DIVISION.",
+        "       WORKING-STORAGE SECTION.",
+        "       01 WS-AREA.",
+        "       COPY CAREA.",
+        "       01 WS-A PIC X(10).",
+        "       LINKAGE SECTION.",
+        "       01 DFHCOMMAREA PIC X(10).",
+        after_linkage,
+    ]
+    return ("\n".join(lines) + "\n").encode()
+
+
+def test_a_copybook_supplying_the_procedure_header_opens_the_procedure() -> None:
+    # The CICS idiom: ``CENTRY`` holds only ``PROCEDURE DIVISION.``.
+    source = _centry_program(
+        "       COPY CENTRY.\n"
+        "           MOVE DFHCOMMAREA TO WS-A.\n"
+        "           CALL 'SSECURE' USING WS-A.\n"
+        "           PERFORM WORK-PARA.\n"
+        "       COPY CRETURN.\n"
+        "       WORK-PARA.\n"
+        "           MOVE SPACES TO WS-A.\n"
+    )
+
+    parsed = _parse(source)
+
+    assert parsed.parse_errors == []
+    assert _names(parsed)["WORK-PARA"] == 15
+    assert {"SSECURE", "WORK-PARA"} <= {call.target_name for call in parsed.calls}
+    assert [i.module_path for i in parsed.imports] == ["CAREA", "CENTRY", "CRETURN"]
+
+
+def test_a_header_copybook_followed_by_a_paragraph_opens_the_procedure() -> None:
+    parsed = _parse(_centry_program("       COPY CENTRY.\n       MAIN-PARA.\n           GOBACK.\n"))
+
+    assert parsed.parse_errors == []
+    assert _names(parsed)["MAIN-PARA"] == 11
+
+
+@pytest.mark.parametrize(
+    "after_linkage",
+    [
+        # A LINKAGE copybook, then more data.
+        "       COPY CLINK.\n       01 LK-B PIC X.\n",
+        # A copybook that ends the data division with nothing after it.
+        "       COPY CLINK.\n",
+        # A copybook followed by another data section.
+        "       COPY CLINK.\n       LOCAL-STORAGE SECTION.\n       01 LS-A PIC X.\n",
+        # Copybooks in a row: the next one is not statement text.
+        "       COPY CLINK.\n       COPY CLINK2.\n",
+    ],
+    ids=["more-data", "nothing-after", "data-section", "copy-after-copy"],
+)
+def test_a_data_division_copybook_never_opens_the_procedure(after_linkage: str) -> None:
+    from repowise.core.ingestion.cobol import prepare_cobol_source
+
+    prepared = prepare_cobol_source(_centry_program(after_linkage)).decode()
+
+    assert "PROCEDURE" not in prepared
+    assert prepared.count("01 FILLER PIC X.") == after_linkage.count("COPY") + 1

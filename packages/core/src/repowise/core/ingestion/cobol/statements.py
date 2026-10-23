@@ -28,6 +28,19 @@ _COPY = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 _PROCEDURE_DIVISION = re.compile(r"\bPROCEDURE\s+DIVISION\b", re.IGNORECASE)
+# What can follow a COPY only in the procedure division: a verb, ``EXEC CICS``,
+# or a paragraph or section header alone on its line. A data COPY is followed
+# by an entry, a section header, another COPY or nothing.
+_NOT_PROCEDURE_SECTION = (
+    r"(?:CONFIGURATION|INPUT-OUTPUT|FILE|WORKING-STORAGE|LOCAL-STORAGE|LINKAGE"
+    r"|COMMUNICATION|REPORT|SCREEN)\s"
+)
+_STATEMENT_TEXT = re.compile(
+    r"\s*(?:(?:ACCEPT|ADD|CALL|COMPUTE|CONTINUE|DISPLAY|EVALUATE|GO|GOBACK|IF|INITIALIZE"
+    r"|INSPECT|MOVE|OPEN|PERFORM|READ|SET|STRING|WRITE)(?![\w-])|EXEC\s+CICS\b"
+    rf"|(?!{_NOT_PROCEDURE_SECTION}){_NAME}(?:\s+SECTION)?[ \t]*\.[ \t]*\r?$)",
+    re.IGNORECASE | re.MULTILINE,
+)
 _CLOSING_PERIOD = re.compile(r"[ \t]*\.")
 _FILLER = "CONTINUE"
 _DATA_PLACEHOLDER = "01 FILLER PIC X."
@@ -100,16 +113,37 @@ def copy_statements(code: str) -> list[CopyStatement]:
     return [statement for _, statement in sorted(found, key=lambda item: item[0])]
 
 
+def procedure_division(code: str) -> tuple[int, str | None]:
+    """Where *code*'s procedure division opens (``len(code)`` without one), and
+    the member of the COPY that supplies its header, if a copybook does.
+
+    A CICS program can copy its header (``COPY CENTRY.``, a member holding only
+    ``PROCEDURE DIVISION.``). With no header text, the first COPY followed by
+    statement text is taken as the header. Ceiling: the member's own text is
+    not read, since a parse sees one file; reading it would thread the resolved
+    copybooks into every parse. A header COPY followed by another COPY, an
+    ``EXEC SQL`` or a verb not listed is missed.
+    """
+    division = _PROCEDURE_DIVISION.search(code)
+    if division:
+        return division.end(), None
+    for m in _COPY.finditer(code):
+        if _STATEMENT_TEXT.match(code, m.end()):
+            return m.end(), _member_name(m.group("q1") or m.group("q2") or m.group("word"))
+    return len(code), None
+
+
 def mask_statements(code: str, procedure_from: int | None = None) -> str:
     """Blank COPY statements and EXEC blocks, keeping every line and offset.
 
     An EXEC block inside the procedure division becomes ``CONTINUE`` so the
     statement it stood for still parses; elsewhere it is blanked. A procedure
-    copybook passes ``procedure_from=0``.
+    copybook passes ``procedure_from=0``. A COPY supplying the division header
+    becomes that header.
     """
+    header = None
     if procedure_from is None:
-        division = _PROCEDURE_DIVISION.search(code)
-        procedure_from = division.end() if division else len(code)
+        procedure_from, header = procedure_division(code)
     chars = list(code)
     for block in exec_blocks(code):
         end = block.end
@@ -127,7 +161,10 @@ def mask_statements(code: str, procedure_from: int | None = None) -> str:
     for m in reversed(list(_COPY.finditer(masked))):
         newlines = "".join(c for c in m.group(0) if c in "\r\n")
         # In data, an FD or group header needs the record the copybook supplied.
-        text = _DATA_PLACEHOLDER if m.start() < procedure_from else ""
+        if header and m.end() == procedure_from:
+            text = "PROCEDURE DIVISION."
+        else:
+            text = _DATA_PLACEHOLDER if m.start() < procedure_from else ""
         masked = masked[: m.start()] + text + newlines + masked[m.end() :]
     return masked
 
