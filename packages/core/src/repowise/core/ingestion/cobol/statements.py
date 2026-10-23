@@ -28,6 +28,7 @@ _COPY = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 _PROCEDURE_DIVISION = re.compile(r"\bPROCEDURE\s+DIVISION\b", re.IGNORECASE)
+_CLOSING_PERIOD = re.compile(r"[ \t]*\.")
 _FILLER = "CONTINUE"
 _DATA_PLACEHOLDER = "01 FILLER PIC X."
 
@@ -111,7 +112,14 @@ def mask_statements(code: str, procedure_from: int | None = None) -> str:
         procedure_from = division.end() if division else len(code)
     chars = list(code)
     for block in exec_blocks(code):
-        _blank(chars, block.start, block.end)
+        end = block.end
+        period = _CLOSING_PERIOD.match(code, end)
+        if period and block.start < procedure_from and _follows_period(chars, block.start):
+            # Between entries the period ends nothing, and one straight after a
+            # section header (a DCLGEN member) does not parse. Inside an open
+            # entry it is that entry's terminator and stays.
+            end = period.end()
+        _blank(chars, block.start, end)
         if block.start >= procedure_from and not _SQL_INCLUDE.match(block.body):
             chars[block.start : block.start + len(_FILLER)] = _FILLER
     masked = "".join(chars)
@@ -122,6 +130,14 @@ def mask_statements(code: str, procedure_from: int | None = None) -> str:
         text = _DATA_PLACEHOLDER if m.start() < procedure_from else ""
         masked = masked[: m.start()] + text + newlines + masked[m.end() :]
     return masked
+
+
+def _follows_period(chars: list[str], start: int) -> bool:
+    """Whether the code before *start* is empty or ends with a period."""
+    i = start - 1
+    while i >= 0 and chars[i].isspace():
+        i -= 1
+    return i < 0 or chars[i] == "."
 
 
 def _blank(chars: list[str], start: int, end: int) -> None:
