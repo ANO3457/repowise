@@ -1,0 +1,47 @@
+name: Validate COBOL BMS mapset tie-breaking
+on:
+  push:
+    branches: ['validation/codex23-repowise4478']
+env:
+  LITELLM_LOCAL_MODEL_COST_MAP: "True"
+permissions:
+  contents: read
+jobs:
+  python:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v3
+      - run: uv python install 3.12
+      - run: uv sync --all-packages --python 3.12
+      - name: Prove regression on unchanged base
+        run: |
+          uv run python - <<'PY'
+          from pathlib import Path
+          import subprocess
+          import xml.etree.ElementTree as ET
+          path = Path('packages/core/src/repowise/core/ingestion/framework_edges/mainframe.py')
+          fixed = path.read_bytes()
+          try:
+              path.write_bytes(subprocess.check_output(['git', 'show', '1379ae11f526c2c250489dc9767e3a32d1c04015:packages/core/src/repowise/core/ingestion/framework_edges/mainframe.py']))
+              result = subprocess.run(['uv', 'run', 'pytest', 'tests/unit/ingestion/test_mainframe_edges.py', '-k', 'cobol_mapset_wins_a_tie_with_pli', '-q', '--junitxml=red.xml'])
+              tree = ET.parse('red.xml')
+              assert result.returncode == 1
+              assert len(tree.findall('.//testcase/failure')) == 4
+              assert not tree.findall('.//testcase/error')
+          finally:
+              path.write_bytes(fixed)
+          PY
+      - name: Run both required Python suites
+        run: uv run pytest tests/providers/ tests/unit/ -n 4 --dist loadfile -q --junitxml=green.xml
+      - run: uv run ruff check .
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: python-evidence
+          path: |
+            red.xml
+            green.xml
