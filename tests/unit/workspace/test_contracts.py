@@ -56,6 +56,16 @@ class TestNormalizeHttpPath:
     def test_root_path(self) -> None:
         assert normalize_http_path("/") == "/"
 
+    def test_gin_echo_catchall_param(self) -> None:
+        assert normalize_http_path("/swagger/*any") == "/swagger/{param}"
+        assert normalize_http_path("/static/*filepath") == "/static/{param}"
+        assert normalize_http_path("/*any") == "/{param}"
+
+    def test_asterisk_in_segment_not_catchall(self) -> None:
+        assert normalize_http_path("/a*b") == "/a*b"
+        assert normalize_http_path("/files/*") == "/files/*"
+        assert normalize_http_path("/*") == "/*"
+
 
 # ---------------------------------------------------------------------------
 # HttpExtractor

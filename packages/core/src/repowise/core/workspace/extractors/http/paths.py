@@ -40,6 +40,8 @@ def normalize_http_path(path: str) -> str:
     s = re.sub(r"\[[^\]]+\]", "{param}", s)
     # Unify JS template literal ${expr} → {param}
     s = re.sub(r"\$\{[^}]+\}", "{param}", s)
+    # Unify gin/echo catch-all *param → {param}
+    s = re.sub(r"(?:^|(?<=/))\*(\w+)(?=/|$)", "{param}", s)
     return s or "/"
 
 
