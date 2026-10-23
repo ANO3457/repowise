@@ -976,6 +976,10 @@ An `HttpRequest` callout is a consumer when its endpoint and verb are literal
 within one method; `callout:Name` keeps the Named Credential as the base. The
 credential's own endpoint is not read.
 
+Salesforce CLI coverage names a class or trigger, never a file, so it maps to
+the one `.cls` or `.trigger` file of that name, ignoring case. A name two files
+share, or no file has, stays unmapped.
+
 ### QML
 
 Module specs resolve against an index built from the `qmldir` manifests in the
