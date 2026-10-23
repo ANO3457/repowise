@@ -1437,6 +1437,10 @@ class TestSecretPrecision:
             ("src/app.py", 'API_KEY = "prefix-${VAR}-suffix"\n'),
             ("src/app.py", 'TOKEN = "prefix-{{var}}-suffix"\n'),
             ("src/app.py", 'TOKEN = "xxxxxxxxxxxx"\n'),
+            ("classes/RD2_NamingService.cls", "String token = '{!npe03__Donor_Name__c}';\n"),
+            ("pages/Pay.page", '<c:pay accessToken="{!$Credential.OAuthToken}"/>\n'),
+            ("aura/Pay/Pay.cmp", '<c:pay token="{#v.sessionToken}"/>\n'),
+            ("classes/Api.cls", "String token = 'Bearer {!$Credential.OAuthToken}';\n"),
         ],
     )
     def test_elided_or_templated_values_are_not_secrets(self, path: str, source: str) -> None:
@@ -1572,6 +1576,12 @@ class TestNoAlarmOnCodeThatDoesNotShip:
 
     def test_declaration_file_holds_no_sink(self) -> None:
         assert self._found("types/react.d.ts", "type T = { __html: SafeHtml };\n") == []
+
+    def test_a_library_release_in_a_static_resource_holds_no_sink(self) -> None:
+        source = 'eval("console.log("+args.join(",")+")")\n'
+        resources = "force-app/main/default/staticresources/Libs"
+        assert self._found(f"{resources}/arbor-v0.92/src/etc.js", source) == []
+        assert self._found(f"{resources}/app/main.js", source) == [("eval_call", "high")]
 
     def test_inner_html_from_a_value_is_still_medium(self) -> None:
         source = "<div dangerouslySetInnerHTML={{__html: foo}} />\n"
