@@ -134,6 +134,10 @@ class ReportContext:
     #: ``None`` is the default request: the 90 days before the newest
     #: indexed commit, building what is missing.
     period: PeriodRequest | None = None
+    #: ``lookup`` and ``alias`` for the dead-code cross-repo cut
+    #: (``dead_code.serving.serve_findings``) when the repository is a workspace
+    #: member; ``None`` reads stored values.
+    cross_repo: dict[str, Any] | None = None
     _cache: dict[str, Any] = field(default_factory=dict)
 
     async def components(self) -> Any:
