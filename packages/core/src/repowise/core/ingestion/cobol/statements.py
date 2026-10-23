@@ -28,17 +28,27 @@ _COPY = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 _PROCEDURE_DIVISION = re.compile(r"\bPROCEDURE\s+DIVISION\b", re.IGNORECASE)
+_DATA_DIVISION = re.compile(r"(?<![\w-])DATA\s+DIVISION\b", re.IGNORECASE)
+# A division or section header of the environment or data division: none
+# follows the procedure division's header.
+_NOT_PROCEDURE_HEADER = re.compile(
+    r"(?<![\w-])(?:(?:ENVIRONMENT|DATA)\s+DIVISION|(?:CONFIGURATION|INPUT-OUTPUT|FILE"
+    r"|WORKING-STORAGE|LOCAL-STORAGE|LINKAGE|COMMUNICATION|REPORT|SCREEN)\s+SECTION)\b",
+    re.IGNORECASE,
+)
+# Words alone on a line with a period that open no paragraph: environment
+# paragraphs, listing directives, ``DECLARATIVES``.
+_NOT_A_PARAGRAPH = (
+    r"(?:FILE-CONTROL|I-O-CONTROL|SPECIAL-NAMES|SOURCE-COMPUTER|OBJECT-COMPUTER|REPOSITORY"
+    r"|EJECT|SKIP[123]|TITLE|DECLARATIVES)[ \t]*\."
+)
 # What can follow a COPY only in the procedure division: a verb, ``EXEC CICS``,
 # or a paragraph or section header alone on its line. A data COPY is followed
 # by an entry, a section header, another COPY or nothing.
-_NOT_PROCEDURE_SECTION = (
-    r"(?:CONFIGURATION|INPUT-OUTPUT|FILE|WORKING-STORAGE|LOCAL-STORAGE|LINKAGE"
-    r"|COMMUNICATION|REPORT|SCREEN)\s"
-)
 _STATEMENT_TEXT = re.compile(
     r"\s*(?:(?:ACCEPT|ADD|CALL|COMPUTE|CONTINUE|DISPLAY|EVALUATE|GO|GOBACK|IF|INITIALIZE"
     r"|INSPECT|MOVE|OPEN|PERFORM|READ|SET|STRING|WRITE)(?![\w-])|EXEC\s+CICS\b"
-    rf"|(?!{_NOT_PROCEDURE_SECTION}){_NAME}(?:\s+SECTION)?[ \t]*\.[ \t]*\r?$)",
+    rf"|(?!{_NOT_A_PARAGRAPH}){_NAME}(?:\s+SECTION)?[ \t]*\.[ \t]*\r?$)",
     re.IGNORECASE | re.MULTILINE,
 )
 _CLOSING_PERIOD = re.compile(r"[ \t]*\.")
@@ -118,17 +128,22 @@ def procedure_division(code: str) -> tuple[int, str | None]:
     the member of the COPY that supplies its header, if a copybook does.
 
     A CICS program can copy its header (``COPY CENTRY.``, a member holding only
-    ``PROCEDURE DIVISION.``). With no header text, the first COPY followed by
-    statement text is taken as the header. Ceiling: the member's own text is
-    not read, since a parse sees one file; reading it would thread the resolved
-    copybooks into every parse. A header COPY followed by another COPY, an
-    ``EXEC SQL`` or a verb not listed is missed.
+    ``PROCEDURE DIVISION.``). With no header text, the first COPY after the
+    ``DATA DIVISION`` header that is followed by statement text, and by no
+    environment or data division or section header, is taken as the header.
+    Ceiling: the member's own text is not read, since a parse sees one file;
+    reading it would thread the resolved copybooks into every parse. A header
+    COPY followed by another COPY, an ``EXEC SQL`` or a verb not listed, or in
+    a program with no ``DATA DIVISION`` or with a nested program, is missed.
     """
     division = _PROCEDURE_DIVISION.search(code)
     if division:
         return division.end(), None
-    for m in _COPY.finditer(code):
-        if _STATEMENT_TEXT.match(code, m.end()):
+    data = _DATA_DIVISION.search(code)
+    for m in _COPY.finditer(code, data.end() if data else len(code)):
+        if _STATEMENT_TEXT.match(code, m.end()) and not _NOT_PROCEDURE_HEADER.search(
+            code, m.end()
+        ):
             return m.end(), _member_name(m.group("q1") or m.group("q2") or m.group("word"))
     return len(code), None
 

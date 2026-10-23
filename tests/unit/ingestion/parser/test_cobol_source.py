@@ -317,8 +317,11 @@ def test_a_header_copybook_followed_by_a_paragraph_opens_the_procedure() -> None
         "       COPY CLINK.\n       LOCAL-STORAGE SECTION.\n       01 LS-A PIC X.\n",
         # Copybooks in a row: the next one is not statement text.
         "       COPY CLINK.\n       COPY CLINK2.\n",
+        # Listing directives with a period are no paragraph headers.
+        "       COPY CLINK.\n       EJECT.\n",
+        "       COPY CLINK.\n       SKIP1.\n",
     ],
-    ids=["more-data", "nothing-after", "data-section", "copy-after-copy"],
+    ids=["more-data", "nothing-after", "data-section", "copy-after-copy", "eject", "skip1"],
 )
 def test_a_data_division_copybook_never_opens_the_procedure(after_linkage: str) -> None:
     from repowise.core.ingestion.cobol import prepare_cobol_source
@@ -327,3 +330,57 @@ def test_a_data_division_copybook_never_opens_the_procedure(after_linkage: str) 
 
     assert "PROCEDURE" not in prepared
     assert prepared.count("01 FILLER PIC X.") == after_linkage.count("COPY") + 1
+
+
+@pytest.mark.parametrize(
+    "environment",
+    [
+        "       INPUT-OUTPUT SECTION.\n       COPY CFC.\n       FILE-CONTROL.\n",
+        "       CONFIGURATION SECTION.\n       COPY CSRC.\n       SPECIAL-NAMES.\n",
+        "       CONFIGURATION SECTION.\n       COPY CSRC.\n       OBJECT-COMPUTER.\n",
+        "       INPUT-OUTPUT SECTION.\n       COPY CSEL.\n       I-O-CONTROL.\n",
+    ],
+    ids=["file-control", "special-names", "object-computer", "i-o-control"],
+)
+@pytest.mark.parametrize("data", [True, False], ids=["with-data", "no-data"])
+def test_an_environment_division_copybook_never_opens_the_procedure(
+    environment: str, data: bool
+) -> None:
+    from repowise.core.ingestion.cobol import prepare_cobol_source
+
+    data_division = "       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n       01 A PIC X.\n"
+    source = (
+        "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. DEMO.\n"
+        "       ENVIRONMENT DIVISION.\n" + environment + (data_division if data else "")
+    )
+
+    assert "PROCEDURE" not in prepare_cobol_source(source.encode()).decode()
+
+
+def test_a_program_with_its_procedure_header_prepares_as_before() -> None:
+    from repowise.core.ingestion.cobol import prepare_cobol_source
+
+    source = (
+        b"       IDENTIFICATION DIVISION.\n"
+        b"       PROGRAM-ID. DEMO.\n"
+        b"       DATA DIVISION.\n"
+        b"       WORKING-STORAGE SECTION.\n"
+        b"       COPY CAREA.\n"
+        b"       PROCEDURE DIVISION.\n"
+        b"       COPY CENTRY.\n"
+        b"           MOVE 1 TO A.\n"
+        b"           EXEC CICS RETURN END-EXEC.\n"
+    )
+
+    # The data COPY becomes a placeholder entry; the procedure COPY is blanked.
+    assert prepare_cobol_source(source) == (
+        b"       IDENTIFICATION DIVISION.\n"
+        b"       PROGRAM-ID. DEMO.\n"
+        b"       DATA DIVISION.\n"
+        b"       WORKING-STORAGE SECTION.\n"
+        b"       01 FILLER PIC X.\n"
+        b"       PROCEDURE DIVISION.\n"
+        b"       \n"
+        b"           MOVE 1 TO A.\n"
+        b"           CONTINUE                 .\n"
+    )
