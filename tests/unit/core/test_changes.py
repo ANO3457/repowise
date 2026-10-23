@@ -208,6 +208,8 @@ def test_title_takes_an_issue_keyed_line_and_skips_real_trailers():
     assert change_title(subject, "ABC-1: Fix it", True) == "ABC-1: Fix it"
     # A one-paragraph body is the PR title, even in ``type: subject`` form.
     assert change_title(subject, "fix: handle null", True) == "fix: handle null"
+    assert change_title(subject, "\r\n\r\nfix: handle null\r\n", True) == "fix: handle null"
+    assert change_title(subject, "Title\n\nSee merge request g/p!1", True) == "Title"
     # Real trailers are still skipped, in the final paragraph or by known key.
     body = "Signed-off-by: A <a@x>\nCo-authored-by: B <b@x>"
     assert change_title(subject, body, True) == subject

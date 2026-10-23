@@ -121,7 +121,7 @@ def change_title(subject: str, body: str, is_merge: bool) -> str:
     if m := _AZURE_MERGED.match(subject):
         return m.group(1).strip()
     if subject.startswith(_BOILERPLATE_MERGE):
-        lines = [line.strip() for line in body.splitlines()]
+        lines = [line.strip() for line in body.strip().splitlines()]
         # Git keeps trailers in the final paragraph; a body of one paragraph is
         # the title (``fix: x``), save a known trailer such as ``Signed-off-by``.
         final = next((i for i in range(len(lines) - 1, 0, -1) if not lines[i - 1] and lines[i]), 0)
