@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from repowise.core.workspace.contracts import normalize_contract_id
+from repowise.core.workspace.origins import LinkStrategy
 
 from . import data, http, topic
 from .common import MatchState, find_matching_keys, internal, prefer_target_repo
@@ -75,16 +76,13 @@ def _exact_pass(state: MatchState) -> None:
                 continue
             if rules.accepts is not None and not rules.accepts(provider, consumer):
                 continue
-            state.add(
-                consumer,
-                provider,
-                "exact",
-                min(provider.confidence, consumer.confidence),
-                # A key the type's own rule reached under another name (a
-                # pattern subscription) links under the provider's name.
-                via_alias=rules.keys is not None
-                and normalize_contract_id(provider.contract_id) != own,
-            )
+            # A key the type's own rule reached under another name (a pattern
+            # subscription, the only `keys` rule today) links under the
+            # provider's name. A new `keys` rule with another meaning names its
+            # own strategy here.
+            aliased = rules.keys is not None and normalize_contract_id(provider.contract_id) != own
+            strategy = LinkStrategy.PATTERN_MATCHED if aliased else LinkStrategy.EXACT_ID
+            state.add(consumer, provider, strategy, via_alias=aliased)
 
 
 def match_contracts(contracts: list[Contract]) -> list[ContractLink]:

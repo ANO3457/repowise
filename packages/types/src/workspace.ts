@@ -36,6 +36,8 @@ export interface WorkspaceContractLinkEntry {
   contract_id: string;
   contract_type: string;
   match_type: string;
+  /** The matching rule that made the link (`exact_id`, `binding_routed`, ...); `match_type` derives from it. */
+  strategy?: string | null;
   confidence: number;
   provider_repo: string;
   provider_file: string;
@@ -144,6 +146,8 @@ export interface SystemEdge {
   structural: boolean;
   /** Back-pointers to the underlying evidence, for drill-down (bounded). */
   contract_refs: string[];
+  /** Strategy of the link that gave the edge its confidence; null on a co-change edge. */
+  strategy?: string | null;
 }
 
 export interface SystemGraph {
@@ -422,6 +426,10 @@ export interface DependencyCycle {
   edge_ids: string[];
   /** Number of services in the cycle. */
   length: number;
+  /** Edge kinds on each leg: `leg_kinds[i]` joins `nodes[i]` to the next node. */
+  leg_kinds?: string[][];
+  /** Legs only an asynchronous (event) edge joins. */
+  async_legs?: number;
 }
 
 export interface ConformanceReport {

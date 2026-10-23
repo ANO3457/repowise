@@ -302,6 +302,7 @@ The contracts, package dependencies, and co-changes above are each a flat list. 
 
 - a `kind`, `http`, `grpc`, `event`, `package`, `co_change`, or `db`;
 - a `match_type`, `exact`, `candidate`, `manual`, or `inferred`;
+- a `strategy`, the [matching rule](../reference/WORKSPACE_CONTRACTS.md#how-a-contract-and-a-link-were-made) of the link that gave the edge its confidence (`manifest` for a package dependency, none for co-change);
 - a `confidence` and a `weight` (how many underlying contracts / deps / co-changes it aggregates);
 - `contract_refs` back-pointers so any view can drill from an edge to its evidence.
 
@@ -497,7 +498,7 @@ A rule with `allow: false` (the default) is a **deny** rule: a structural depend
 
 ### Dependency cycles
 
-Independently of any rules, conformance detects **circular dependencies** among services over structural edges (`A -> B -> ... -> A`). A cycle means the services cannot be built, deployed, or reasoned about independently. Cycle detection runs even with zero rules declared, so every workspace gets it.
+Independently of any rules, conformance detects **circular dependencies** among services over structural edges (`A -> B -> ... -> A`). A cycle means the services cannot be built, deployed, or reasoned about independently. Cycle detection runs even with zero rules declared, so every workspace gets it. A cycle that closes only through an event edge still counts, since it couples message schemas and deploy order; each cycle lists the edge kinds on every leg (`leg_kinds`) and how many legs are asynchronous (`async_legs`).
 
 ### Using it
 

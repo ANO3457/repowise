@@ -40,6 +40,7 @@ from typing import TYPE_CHECKING, Any
 
 from repowise.core.fsutils import repo_relative
 from repowise.core.pyparse import parse_python
+from repowise.core.workspace.origins import ContractOrigin, origin_confidence
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Collection
@@ -54,7 +55,7 @@ CODE_CONTRACT_TYPE = "code"
 
 #: Both sides are index-resolved, not regex-matched — the manifest and the
 #: import edge each name their half outright.
-_CONFIDENCE = 0.9
+_ORIGIN = ContractOrigin.PACKAGE_EXPORT
 
 #: Manifest basenames handled here, mapped to the ecosystem they declare.
 _MANIFESTS: dict[str, str] = {
@@ -514,7 +515,8 @@ def build_code_surface(
                     role="provider",
                     file_path=symbol.file_path,
                     symbol_name=exported,
-                    confidence=_CONFIDENCE,
+                    confidence=origin_confidence(_ORIGIN),
+                    origin=_ORIGIN,
                     line=symbol.start_line,
                     # Known at emission, so bind_symbol_ids is a no-op here and
                     # attach_signature_schemas reaches the parameter list.
@@ -558,7 +560,8 @@ def build_code_surface(
                             role="consumer",
                             file_path=edge.source_file,
                             symbol_name=f"{package.name}:{exported}",
-                            confidence=_CONFIDENCE,
+                            confidence=origin_confidence(_ORIGIN),
+                            origin=_ORIGIN,
                             meta={
                         "package": package.name,
                         "ecosystem": package.ecosystem,

@@ -6,6 +6,44 @@ contracts, for when you need to know why a link did or did not form. Start from
 names the reason for each unmatched consumer. The support matrix of frameworks
 and libraries is in [API Contract Extraction](../scale/WORKSPACES.md#api-contract-extraction).
 
+## How a contract and a link were made
+
+Every contract carries an `origin` and every link a `strategy`, each from a closed
+vocabulary with exactly one confidence per value, the rule
+[GRAPH.md](../layers/GRAPH.md#every-edge-says-how-it-got-there) applies to call edges. A
+link's confidence is its weaker end's times its strategy's factor, and its `match_type`
+follows from the strategy.
+
+| Confidence | Contract `origin` | What was established |
+|:---:|---|---|
+| 0.90 | `idl` | An OpenAPI or proto document declares the operation |
+| 0.90 | `package_export` | A published package exports the symbol another repo imports |
+| 0.85 | `route_registration` | A framework registers the route, handler, server or hub in code |
+| 0.85 | `typed_client` | The parsed index types the receiver as an HTTP client |
+| 0.85 | `ddl` | SQL DDL or a migration creates or alters the table |
+| 0.85 | `explicit_table` | An ORM model names its table explicitly |
+| 0.75 | `client_call` | A known client, broker, socket or query-builder call names the destination |
+| 0.75 | `instance_base` | A call on a client instance whose base URL the file reads |
+| 0.70 | `dataflow` | The destination was traced across statements to the call |
+| 0.70 | `sql_string` | A table named inside SQL text in a string |
+| 0.65 | `name_heuristic` | Only a callee or receiver name says it is a client call |
+| 0.60 | `name_convention` | A naming convention: an ORM's default table name, a unique short type name |
+
+| Factor | Link `strategy` | `match_type` | What joined the two ends |
+|:---:|---|---|---|
+| 1.0 | `exact_id` | exact | Both name the same normalized id, method and service wildcards included |
+| 1.0 | `pattern_matched` | exact | The consumer's subscription pattern matches the provider's name |
+| 1.0 | `binding_routed` | exact | A queue bound to the provider's exchange, with a routing key it receives |
+| 1.0 | `shared_table` | exact | A service that only models a table, to the one service defining its schema |
+| 1.0 | `service_mapped` | exact | The consumer's host or base token maps to the providing service |
+| 1.0 | `unique_path` | exact | The consumer's base is unread and one service serves the path |
+| 0.6 | `ambiguous_path` | candidate | The base is unread and several services serve the path; linked to each |
+| 0.6 | `prefix_stripped` | candidate | Matched only after stripping mount, version or base prefixes |
+| 1.0 | `manual` | manual | Declared in the workspace config |
+
+A new dialect picks an existing origin, not a number. A system-graph edge carries the
+strategy of the link that gave it its confidence, and `manifest` for a package dependency.
+
 ## Sockets
 
 An endpoint is identified by its path (`socket::/hubs/game`); a message by its
@@ -31,7 +69,10 @@ topic ARN by its last field. A subscription by pattern (NATS `orders.*` /
 whose name it matches. A Laravel job dispatched without a queue runs on the
 queue its class declares (`public $queue`, `$this->onQueue()`, `viaQueue()`),
 found by the class's fully qualified name; one left on the connection's
-default queue is not recorded, since every app has one. RabbitMQ
+default queue is not recorded, since every app has one. A Laravel job class
+links only to a Laravel dispatch of that class: a raw publish (amqplib
+`sendToQueue`) on a queue of the same name is not the job envelope its worker
+reads. RabbitMQ
 publishers name an exchange and a routing key while consumers name a queue, so
 a queue binding found anywhere in the workspace connects the two: each consumer
 of the bound queue links to the exchange's publishers whose routing key the
@@ -62,7 +103,8 @@ or injected as `HttpClient`, with `environment.apiUrl` folded from `src/environm
 fields built on it; a base an interceptor prepends is not read. A client call
 whose base URL is an unresolved placeholder (`fetch(\`${API_BASE}/users\`)`) matches
 on the host-relative path; the link is **exact** when exactly one workspace service
-provides that path and a lower-confidence **candidate** when the target is ambiguous.
+provides that path (`unique_path`) and a lower-confidence **candidate** when the target
+is ambiguous (`ambiguous_path`).
 
 ## Contracts over REST
 

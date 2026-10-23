@@ -116,7 +116,7 @@ class NestMicroservicesDialect:
                             kind=call.kind,
                             role=call.role,
                             label=call.label,
-                            confidence=call.confidence,
+                            origin=call.origin,
                             offset=m.start(),
                         )
                     )

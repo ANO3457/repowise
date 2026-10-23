@@ -16,6 +16,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from repowise.core.workspace.cross_repo import MAX_EDGES, MAX_EDGES_PER_REPO_PAIR
+from repowise.core.workspace.origins import legacy_strategy
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
@@ -51,6 +52,7 @@ def contract_row(c: dict) -> dict[str, Any]:
         "service": c.get("service"),
         "line": c.get("line"),
         "symbol_id": c.get("symbol_id"),
+        "origin": c.get("origin"),
         "meta": c.get("meta") or {},
     }
 
@@ -61,6 +63,7 @@ def link_row(lk: dict) -> dict[str, Any]:
         "contract_id": lk.get("contract_id", ""),
         "contract_type": lk.get("contract_type", ""),
         "match_type": lk.get("match_type", "exact"),
+        "strategy": lk.get("strategy") or legacy_strategy(lk.get("match_type", "exact")),
         "confidence": lk.get("confidence", 0.0),
         "provider_repo": lk.get("provider_repo", ""),
         "provider_file": lk.get("provider_file", ""),

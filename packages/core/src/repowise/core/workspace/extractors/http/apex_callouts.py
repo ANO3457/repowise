@@ -24,6 +24,7 @@ import re
 from typing import TYPE_CHECKING
 
 from repowise.core.ingestion.framework_routes import apex_code
+from repowise.core.workspace.origins import ContractOrigin
 
 from ..base import line_at
 from ..langs import APEX
@@ -56,8 +57,6 @@ _CALLOUT_RE = re.compile(
     r"callout:(?P<name>[A-Za-z]\w*)(?P<rest>[/?].*)?", re.IGNORECASE | re.DOTALL
 )
 _ABSOLUTE_RE = re.compile(r"https?://[^/$?]+(?:[/?]|$)", re.IGNORECASE)
-
-_CONFIDENCE = 0.75
 
 
 def _blocks(code: str) -> list[tuple[int, int, bool]]:
@@ -221,7 +220,7 @@ class ApexCalloutsDialect:
                 url=endpoint,
                 client="apex-callout",
                 line=line_at(content, m.start()),
-                confidence=_CONFIDENCE,
+                origin=ContractOrigin.CLIENT_CALL,
             )
             if c is not None:
                 c.symbol_name = f"apex-callout:{method} {url}"  # as written, not rewritten

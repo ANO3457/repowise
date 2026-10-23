@@ -30,7 +30,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any
 
-from repowise.core.workspace.system_graph import SystemEdge, SystemGraph
+from repowise.core.workspace.system_graph import SystemGraph
 
 # ---------------------------------------------------------------------------
 # Constants (single source of truth)
@@ -165,25 +165,6 @@ class _Accum:
     edge_kinds: set[str]
 
 
-def _build_impact_adjacency(
-    edges: list[SystemEdge],
-) -> dict[str, list[tuple[str, SystemEdge]]]:
-    """Adjacency in *impact* direction: changed-node id → (dependent id, edge).
-
-    Structural edge ``source → target`` (source depends on target): changing
-    ``target`` impacts ``source``, so we add ``target → source``. Behavioral
-    co-change edges are symmetric, so both endpoints impact each other.
-    """
-    adj: dict[str, list[tuple[str, SystemEdge]]] = defaultdict(list)
-    for e in edges:
-        if e.structural:
-            adj[e.target].append((e.source, e))
-        else:
-            adj[e.source].append((e.target, e))
-            adj[e.target].append((e.source, e))
-    return adj
-
-
 def cross_repo_blast_radius(
     graph: SystemGraph,
     targets: list[str],
@@ -218,10 +199,9 @@ def cross_repo_blast_radius(
             unresolved_targets=unresolved,
         )
 
-    edges = graph.edges
-    if not include_behavioral:
-        edges = [e for e in edges if e.structural]
-    adj = _build_impact_adjacency(edges)
+    # Impact direction: a change to a node reaches whatever depends on it, and
+    # co-change edges are symmetric, so both endpoints reach each other.
+    adj = graph.adjacency(behavioral=include_behavioral, impact=True)
 
     best: dict[str, _Accum] = {}
     # Frontier value per node: (propagated score, path-is-all-structural).
@@ -230,7 +210,7 @@ def cross_repo_blast_radius(
     for hop in range(1, depth + 1):
         next_frontier: dict[str, tuple[float, bool]] = {}
         for src, (src_score, src_structural) in frontier.items():
-            for dst, edge in adj.get(src, []):
+            for dst, edge in ((d, e) for d, es in adj.get(src, {}).items() for e in es):
                 if dst in target_set:
                     continue  # never impact a changed node back onto itself
                 factor = 1.0 if edge.structural else BEHAVIORAL_EDGE_WEIGHT

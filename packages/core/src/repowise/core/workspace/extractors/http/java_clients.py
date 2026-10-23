@@ -25,6 +25,8 @@ import re
 from collections.abc import Iterator
 from typing import TYPE_CHECKING
 
+from repowise.core.workspace.origins import ContractOrigin
+
 from ..langs import JAVA
 from ..strings import JAVA_SYNTAX, call_arguments, match_paren, string_constants
 from .client_calls import VERBS, ClientCallMatch, consumer_contracts, method_from_argument
@@ -57,9 +59,6 @@ _REST_TEMPLATE_RE = re.compile(
     r"\s*\("
 )
 
-_FEIGN_CONFIDENCE = 0.75
-_BUILDER_CONFIDENCE = 0.75
-_REST_TEMPLATE_CONFIDENCE = 0.65
 
 
 def feign_calls(content: str) -> Iterator[ClientCallMatch]:
@@ -74,7 +73,7 @@ def feign_calls(content: str) -> Iterator[ClientCallMatch]:
             url=f'"{m.group(2).strip()}"',
             offset=m.start(),
             method=verb.upper(),
-            confidence=_FEIGN_CONFIDENCE,
+            origin=ContractOrigin.CLIENT_CALL,
         )
 
 
@@ -131,7 +130,7 @@ def java_net_http_calls(content: str) -> Iterator[ClientCallMatch]:
             url=url,
             offset=m.start(),
             method=method,
-            confidence=_BUILDER_CONFIDENCE,
+            origin=ContractOrigin.CLIENT_CALL,
         )
 
 
@@ -157,7 +156,7 @@ def resttemplate_calls(content: str) -> Iterator[ClientCallMatch]:
             offset=m.start(),
             callee=callee,
             method=method,
-            confidence=_REST_TEMPLATE_CONFIDENCE,
+            origin=ContractOrigin.NAME_HEURISTIC,
         )
 
 

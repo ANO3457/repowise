@@ -16,11 +16,13 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING
 
+from repowise.core.workspace.origins import ContractOrigin
+
 from ..base import ScanContext, line_at
 from ..calls import Call, call_sites, decorated_member, file_strings, receiver_name
 from ..langs import JS_TS
 from ..strings import Arg, call_arguments, match_paren, on_comment_line, select_argument
-from .dialect import CONVENTION_CONFIDENCE, EXPLICIT_CONFIDENCE, dedup_emit
+from .dialect import dedup_emit
 from .names import pluralize, snake_case
 
 if TYPE_CHECKING:
@@ -50,7 +52,7 @@ def _table(model: str, options: list[str], strings: FileStrings) -> tuple[str, f
     if refused:
         return None
     if names:
-        return names[0], EXPLICIT_CONFIDENCE
+        return names[0], ContractOrigin.EXPLICIT_TABLE
     modelled, refused = strings.resolve(options, Arg(keys=("modelName",)))
     if refused:
         return None
@@ -60,7 +62,7 @@ def _table(model: str, options: list[str], strings: FileStrings) -> tuple[str, f
             name = pluralize(name)
         if _flag(options, "underscored"):
             name = snake_case(name)
-    return name, CONVENTION_CONFIDENCE
+    return name, ContractOrigin.NAME_CONVENTION
 
 
 class SequelizeDialect:

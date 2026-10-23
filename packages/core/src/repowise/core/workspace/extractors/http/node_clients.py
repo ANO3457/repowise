@@ -30,6 +30,8 @@ from dataclasses import dataclass
 from functools import lru_cache
 from typing import TYPE_CHECKING
 
+from repowise.core.workspace.origins import ContractOrigin
+
 from ..base import line_at
 from ..calls import Call, call_sites, file_strings, receiver_at
 from ..langs import JS_EXTENSION_RE, JS_TS
@@ -420,7 +422,12 @@ def client_calls(ctx: ScanContext) -> tuple[list[Contract], frozenset[str]]:
         if not is_rooted_url(url):
             continue  # relative to a base this cannot see
         c = build_consumer_contract(
-            ctx, method=method, url=url, client=client.library.name, line=line_at(content, m.start())
+            ctx,
+            method=method,
+            url=url,
+            client=client.library.name,
+            line=line_at(content, m.start()),
+            origin=ContractOrigin.INSTANCE_BASE if client.base else ContractOrigin.CLIENT_CALL,
         )
         if c is not None:
             out.append(c)

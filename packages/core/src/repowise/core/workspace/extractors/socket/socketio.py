@@ -23,6 +23,8 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING
 
+from repowise.core.workspace.origins import ContractOrigin
+
 from ..calls import call_chain, call_sites, file_strings
 from ..langs import JS_TS
 from ..strings import Arg, call_arguments, match_paren
@@ -186,7 +188,7 @@ class SocketIoDialect:
                         role=_VERBS[verb],
                         transport=_TRANSPORT,
                         label=f"{recv}.{verb}",
-                        confidence=0.75,
+                        origin=ContractOrigin.CLIENT_CALL,
                         offset=offset,
                     )
                     for event in events
@@ -254,7 +256,6 @@ WEBSOCKETS = SocketDialect(
             label="new WebSocket",
             extensions=JS_TS,
             name=_FIRST,
-            confidence=0.75,
             requires=("WebSocket",),
         ),
     ),

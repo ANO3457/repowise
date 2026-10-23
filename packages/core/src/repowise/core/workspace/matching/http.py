@@ -13,6 +13,7 @@ from collections import defaultdict
 from typing import TYPE_CHECKING
 
 from repowise.core.workspace.contracts import normalize_contract_id
+from repowise.core.workspace.origins import LinkStrategy
 
 from .common import find_matching_keys, internal, prefer_target_repo
 
@@ -25,16 +26,14 @@ if TYPE_CHECKING:
 # candidate pass strips these leading segments (plus unresolved base ``{param}``
 # segments) from both provider and consumer paths so a consumer that hits
 # ``/api/v1/users`` can still link to a provider mounted at ``/users`` (or vice
-# versa). Such links are emitted as lower-confidence ``candidate`` matches.
+# versa). Such links are emitted as lower-confidence ``candidate`` matches
+# (:attr:`LinkStrategy.PREFIX_STRIPPED`).
 #
 # Kept deliberately small: only segments that are almost never real resource
 # names. Words like ``internal``/``public``/``gateway`` are excluded because
 # they double as legitimate route segments and would conflate unrelated routes.
 _MOUNT_PREFIX_SEGMENTS = frozenset({"api", "rest"})
 _VERSION_SEGMENT_RE = re.compile(r"^v\d+$")
-
-# Confidence multiplier applied to candidate (non-exact) links.
-CANDIDATE_CONFIDENCE_FACTOR = 0.6
 
 # Request paths ending in these suffixes are static assets, never API contracts.
 # They are excluded from the candidate pass so a ``fetch('/static/app.js')``
@@ -204,9 +203,10 @@ def is_deferred(consumer: Contract) -> bool:
 def base_resolved_pass(state: MatchState) -> None:
     """Match consumers whose unresolved base was stripped, on their host-relative path.
 
-    The link is ``exact`` when the target service is unambiguous (one matching
-    service, or a configured ``service_bases`` target that narrows to a
-    provider) and ``candidate`` otherwise.
+    The strategy names how the target service was settled: a host or
+    ``service_bases`` target that narrows to a provider (``service_mapped``),
+    the only service serving the path (``unique_path``), or neither, linking
+    every service that serves it (``ambiguous_path``, a candidate).
     """
     for consumer in state.unmatched("http"):
         if not is_deferred(consumer):
@@ -227,13 +227,14 @@ def base_resolved_pass(state: MatchState) -> None:
         narrowed = [p for p in providers if p.repo == target] if target else []
         if narrowed:
             providers = narrowed
-        resolved = bool(narrowed) or len({(p.repo, p.service) for p in providers}) == 1
-        match_type = "exact" if resolved else "candidate"
+        if narrowed:
+            strategy = LinkStrategy.SERVICE_MAPPED
+        elif len({(p.repo, p.service) for p in providers}) == 1:
+            strategy = LinkStrategy.UNIQUE_PATH
+        else:
+            strategy = LinkStrategy.AMBIGUOUS_PATH
         for provider in providers:
-            confidence = min(provider.confidence, consumer.confidence)
-            if not resolved:
-                confidence = round(confidence * CANDIDATE_CONFIDENCE_FACTOR, 3)
-            state.add(consumer, provider, match_type, confidence)
+            state.add(consumer, provider, strategy)
 
 
 def candidate_pass(state: MatchState) -> None:
@@ -265,15 +266,10 @@ def candidate_pass(state: MatchState) -> None:
             psplit = _split_http_id(normalize_contract_id(provider.contract_id))
             if psplit is None or not _methods_compatible(method, psplit[0]):
                 continue
-            confidence = round(
-                min(provider.confidence, consumer.confidence) * CANDIDATE_CONFIDENCE_FACTOR,
-                3,
-            )
-            state.add(consumer, provider, "candidate", confidence)
+            state.add(consumer, provider, LinkStrategy.PREFIX_STRIPPED)
 
 
 __all__ = [
-    "CANDIDATE_CONFIDENCE_FACTOR",
     "annotate_consumer_targets",
     "base_resolved_pass",
     "candidate_pass",

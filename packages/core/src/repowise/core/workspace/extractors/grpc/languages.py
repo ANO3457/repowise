@@ -1,7 +1,7 @@
 """The generated-stub shapes gRPC produces, one table row per language.
 
 Every language dialect was the same loop over a provider regex and a consumer
-regex, differing only in the pattern, the display wording and the confidence.
+regex, differing only in the pattern, the display wording and the origin.
 The three real per-language facts are declared instead of coded: C# has two
 provider shapes, TypeScript has no consumer shape and is the only one whose
 match names a method, and a bare ``new XxxClient(...)`` needs a gRPC marker in
@@ -16,6 +16,8 @@ import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from repowise.core.workspace.origins import ContractOrigin
+
 from ..base import line_at
 from ..dialect import build_contract
 from ..langs import CSHARP, GO, JAVA, JS_TS, PYTHON
@@ -26,6 +28,11 @@ if TYPE_CHECKING:
     from ..base import ScanContext
 
 
+_ROUTE_REGISTRATION = ContractOrigin.ROUTE_REGISTRATION
+_CLIENT_CALL = ContractOrigin.CLIENT_CALL
+# `new XClient(` names any class so; nothing confirms it is a gRPC stub.
+_NAME_HEURISTIC = ContractOrigin.NAME_HEURISTIC
+
 @dataclass(frozen=True)
 class _Rule:
     """One recognisable shape. Group 1 is always the service name."""
@@ -34,7 +41,7 @@ class _Rule:
     pattern: re.Pattern[str]
     symbol: str  # display template over {service} and {method}
     source: str  # meta["source"], the tag that says which shape matched
-    confidence: float
+    origin: ContractOrigin
     method_group: int | None = None  # only a shape that names a method sets this
 
 
@@ -56,10 +63,10 @@ LANGUAGES: tuple[_Language, ...] = (
         rules=(
             # pb.RegisterAuthServiceServer(grpcServer, &impl{})
             _Rule("provider", re.compile(r"\.Register(\w+)Server\s*\("),
-                  "go:Register{service}Server", "go_register", 0.8),
+                  "go:Register{service}Server", "go_register", _ROUTE_REGISTRATION),
             # pb.NewAuthServiceClient(conn)
             _Rule("consumer", re.compile(r"\.New(\w+)Client\s*\("),
-                  "go:New{service}Client", "go_client", 0.7),
+                  "go:New{service}Client", "go_client", _CLIENT_CALL),
         ),
     ),
     _Language(
@@ -68,10 +75,10 @@ LANGUAGES: tuple[_Language, ...] = (
         rules=(
             # extends AuthServiceGrpc.AuthServiceImplBase
             _Rule("provider", re.compile(r"extends\s+(\w+)Grpc\.(\w+)ImplBase"),
-                  "java:extends {service}Grpc.ImplBase", "java_extends", 0.8),
+                  "java:extends {service}Grpc.ImplBase", "java_extends", _ROUTE_REGISTRATION),
             # AuthServiceGrpc.newBlockingStub(channel)
             _Rule("consumer", re.compile(r"(\w+)Grpc\.new(?:Blocking|Future)?Stub\s*\("),
-                  "java:{service}Grpc.newStub", "java_stub", 0.7),
+                  "java:{service}Grpc.newStub", "java_stub", _CLIENT_CALL),
         ),
     ),
     _Language(
@@ -80,10 +87,10 @@ LANGUAGES: tuple[_Language, ...] = (
         rules=(
             # add_AuthServiceServicer_to_server(servicer, server)
             _Rule("provider", re.compile(r"add_(\w+?)Servicer_to_server\s*\("),
-                  "py:add_{service}Servicer_to_server", "py_servicer", 0.8),
+                  "py:add_{service}Servicer_to_server", "py_servicer", _ROUTE_REGISTRATION),
             # AuthServiceStub(channel)
             _Rule("consumer", re.compile(r"(\w+)Stub\s*\("),
-                  "py:{service}Stub", "py_stub", 0.7),
+                  "py:{service}Stub", "py_stub", _CLIENT_CALL),
         ),
         false_prefixes=("mock", "test", "fake"),
     ),
@@ -93,7 +100,7 @@ LANGUAGES: tuple[_Language, ...] = (
         rules=(
             # @GrpcMethod('AuthService', 'Login') — the one shape naming a method.
             _Rule("provider", re.compile(r"@GrpcMethod\s*\(\s*'(\w+)'\s*,\s*'(\w+)'\s*\)"),
-                  "ts:@GrpcMethod('{service}', '{method}')", "ts_decorator", 0.8,
+                  "ts:@GrpcMethod('{service}', '{method}')", "ts_decorator", _ROUTE_REGISTRATION,
                   method_group=2),
         ),
     ),
@@ -103,14 +110,14 @@ LANGUAGES: tuple[_Language, ...] = (
         rules=(
             # app.MapGrpcService<GreeterService>()
             _Rule("provider", re.compile(r"\.\s*MapGrpcService\s*<\s*(\w+)\s*>"),
-                  "cs:MapGrpcService<{service}>", "csharp_mapgrpc", 0.8),
+                  "cs:MapGrpcService<{service}>", "csharp_mapgrpc", _ROUTE_REGISTRATION),
             # class Impl : ServiceName.ServiceNameBase
             _Rule("provider",
                   re.compile(r"class\s+\w+\s*:\s*(?:[\w.]+\.)?(\w+?)\s*\.\s*\1Base\b"),
-                  "cs:extends {service}.{service}ServiceBase", "csharp_base", 0.8),
+                  "cs:extends {service}.{service}ServiceBase", "csharp_base", _ROUTE_REGISTRATION),
             # new AuthServiceClient(channel)
             _Rule("consumer", re.compile(r"\bnew\s+(\w+)Client\s*\("),
-                  "cs:new {service}Client", "csharp_client", 0.65),
+                  "cs:new {service}Client", "csharp_client", _NAME_HEURISTIC),
         ),
         consumer_gate=re.compile(
             r"\bGrpcChannel\b|\bGrpc\.(?:Net|Core)\b|\bCallInvoker\b|\bChannelBase\b"
@@ -148,7 +155,7 @@ class LanguageGrpcDialect:
                         contract_id=f"grpc::{service}/{method or '*'}",
                         role=rule.role,
                         symbol_name=rule.symbol.format(service=service, method=method),
-                        confidence=rule.confidence,
+                        origin=rule.origin,
                         meta={
                             "service": service,
                             **({"method": method} if method else {}),

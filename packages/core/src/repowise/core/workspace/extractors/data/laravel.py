@@ -17,13 +17,11 @@ import re
 from typing import TYPE_CHECKING
 
 from repowise.core.ingestion.framework_routes import scan_code
+from repowise.core.workspace.origins import ContractOrigin
 
 from ..base import ScanContext, line_at
 from ..langs import PHP
 from .dialect import (
-    ALTER_CONFIDENCE,
-    CONVENTION_CONFIDENCE,
-    EXPLICIT_CONFIDENCE,
     dedup_consumers,
     dedup_emit,
     found_names,
@@ -58,12 +56,12 @@ class EloquentDialect:
     _ELOQUENT_IMPORT = ("Illuminate\\Database\\Eloquent", "Illuminate\\Foundation\\Auth")
 
     def extract(self, ctx: ScanContext) -> list[Contract]:
-        found = found_names(self._TABLE_RE, ctx.content, EXPLICIT_CONFIDENCE)
+        found = found_names(self._TABLE_RE, ctx.content, ContractOrigin.EXPLICIT_TABLE)
         if not found and any(i in ctx.content for i in self._ELOQUENT_IMPORT):
             found = found_names(
                 self._MODEL_CLASS_RE,
                 ctx.content,
-                CONVENTION_CONFIDENCE,
+                ContractOrigin.NAME_CONVENTION,
                 lambda cls: pluralize(snake_case(cls)),
             )
         return dedup_emit(ctx, self.name, found)
@@ -82,8 +80,8 @@ class LaravelMigrationDialect:
     def extract(self, ctx: ScanContext) -> list[Contract]:
         if "Schema::" not in ctx.content:
             return []  # far cheaper than the regexes, which have no literal prefix
-        created = found_names(self._CREATE_RE, ctx.content, EXPLICIT_CONFIDENCE)
-        altered = found_names(self._ALTER_RE, ctx.content, ALTER_CONFIDENCE)
+        created = found_names(self._CREATE_RE, ctx.content, ContractOrigin.DDL)
+        altered = found_names(self._ALTER_RE, ctx.content, ContractOrigin.DDL)
         return dedup_emit(ctx, self.name, created, schema="create") + dedup_emit(
             ctx, self.name, altered, schema="alter"
         )

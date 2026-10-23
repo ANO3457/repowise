@@ -41,7 +41,7 @@ from statistics import median
 from typing import Any
 
 from repowise.core.workspace.cycles import detect_cycles
-from repowise.core.workspace.system_graph import SystemEdge, SystemGraph
+from repowise.core.workspace.system_graph import SystemGraph
 
 _log = logging.getLogger("repowise.workspace.architecture_metrics")
 
@@ -203,19 +203,14 @@ class ArchitectureMetrics:
 # ---------------------------------------------------------------------------
 
 
-def _structural_adjacency(edges: list[SystemEdge]) -> dict[str, set[str]]:
+def _structural_adjacency(graph: SystemGraph) -> dict[str, set[str]]:
     """Forward dependency adjacency over structural edges: ``source -> {targets}``.
 
-    Direction is the system graph's own: ``source`` depends on / calls
-    ``target``. Behavioral co-change edges are excluded — they assert correlated
-    change, not a dependency, so they never contribute to reachability.
+    The graph's own :meth:`SystemGraph.adjacency`, so reachability here and the
+    cycles reported beside it walk the same edges. Behavioral co-change edges
+    are excluded: they assert correlated change, not a dependency.
     """
-    adj: dict[str, set[str]] = {}
-    for edge in edges:
-        if not edge.structural:
-            continue
-        adj.setdefault(edge.source, set()).add(edge.target)
-    return adj
+    return {src: set(targets) for src, targets in graph.adjacency().items()}
 
 
 def _reachable(start: str, adj: dict[str, set[str]], node_ids: set[str]) -> set[str]:
@@ -372,7 +367,7 @@ def compute_architecture_metrics(
     node_ids = [n.id for n in graph.nodes]
     n = len(node_ids)
 
-    adj = _structural_adjacency(graph.edges)
+    adj = _structural_adjacency(graph)
     structural_edge_count = sum(len(t) for t in adj.values())
 
     # Empty / single-service workspaces are vacuously decoupled — no coupling is

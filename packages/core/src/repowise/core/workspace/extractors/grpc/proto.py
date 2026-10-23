@@ -18,6 +18,7 @@ import re
 from typing import TYPE_CHECKING, NamedTuple
 
 from repowise.core.workspace.contract_schema import ContractSchema, SchemaField
+from repowise.core.workspace.origins import ContractOrigin
 
 from ..dialect import build_contract
 from ..langs import PROTO
@@ -225,7 +226,7 @@ class ProtoDialect:
                     contract_id=f"grpc::{svc.full_path}/{method.name}",
                     role="provider",
                     symbol_name=f"{svc.full_path}/{method.name}",
-                    confidence=0.85,
+                    origin=ContractOrigin.IDL,
                     meta={
                         "package": package,
                         "service": svc.name,

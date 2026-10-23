@@ -4581,6 +4581,7 @@ export interface WorkspaceContractEntry {
   service?: string | null;
   line?: number | null;
   symbol_id?: string | null;
+  origin?: string | null;
   meta?: Record<string, unknown>;
 }
 
@@ -4588,6 +4589,7 @@ export interface WorkspaceContractLinkEntry {
   contract_id: string;
   contract_type: string;
   match_type: string;
+  strategy?: string | null;
   confidence: number;
   provider_repo: string;
   provider_file: string;
@@ -4637,6 +4639,8 @@ export interface WorkspaceDependencyCycle {
   nodes?: string[];
   edge_ids?: string[];
   length?: number;
+  leg_kinds?: string[][];
+  async_legs?: number;
 }
 
 export interface WorkspaceExtractionDiagnostics {
@@ -4831,6 +4835,7 @@ export interface WorkspaceSystemEdge {
   weight?: number;
   structural?: boolean;
   contract_refs?: string[];
+  strategy?: string | null;
 }
 
 export interface WorkspaceSystemGraphResponse {
