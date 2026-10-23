@@ -19,6 +19,8 @@ from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from repowise.core.workspace.origins import ContractOrigin
+
 from ..base import line_at
 from ..strings import StringSyntax, literal_span, resolve_string
 from .dialect import build_consumer_contract, method_from_callee
@@ -49,7 +51,7 @@ class ClientCallMatch:
     offset: int
     callee: str = ""
     method: str | None = None
-    confidence: float = 0.75
+    origin: ContractOrigin = ContractOrigin.CLIENT_CALL
 
 
 # ---------------------------------------------------------------------------
@@ -128,7 +130,7 @@ def consumer_contracts(
             url=url,
             client=m.client,
             line=line_at(ctx.content, m.offset),
-            confidence=m.confidence,
+            origin=m.origin,
         )
         if c is not None:
             out.append(c)
@@ -143,7 +145,7 @@ def matches_in(
     url_group: int,
     method_group: int | None = None,
     callee_group: int | None = None,
-    confidence: float = 0.75,
+    origin: ContractOrigin = ContractOrigin.CLIENT_CALL,
     prefix_group: int | None = None,
 ) -> Iterator[ClientCallMatch]:
     """Rows for every match of *pattern* whose *url_group* captured a literal body.
@@ -163,7 +165,7 @@ def matches_in(
             offset=m.start(),
             callee=m.group(callee_group) if callee_group is not None else "",
             method=m.group(method_group).upper() if method_group is not None else None,
-            confidence=confidence,
+            origin=origin,
         )
 
 

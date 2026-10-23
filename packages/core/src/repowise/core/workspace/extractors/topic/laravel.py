@@ -33,6 +33,7 @@ from repowise.core.ingestion.languages.php_same_namespace import (
     qualify_php_name,
 )
 from repowise.core.workspace.contracts import TOPIC_KIND_QUEUE
+from repowise.core.workspace.origins import ContractOrigin
 
 from ..calls import FileStrings, call_chain
 from ..langs import PHP
@@ -282,7 +283,7 @@ class _LaravelQueuePass:
             kind=TOPIC_KIND_QUEUE,
             role=role,
             label=label,
-            confidence=0.8,
+            origin=ContractOrigin.CLIENT_CALL,
             offset=offset,
             **extra,
         )

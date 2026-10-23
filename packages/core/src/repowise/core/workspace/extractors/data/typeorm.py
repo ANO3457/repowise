@@ -12,11 +12,13 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING
 
+from repowise.core.workspace.origins import ContractOrigin
+
 from ..base import ScanContext, line_at
 from ..calls import Call, call_sites, decorated_member
 from ..langs import JS_TS
 from ..strings import Arg, on_comment_line
-from .dialect import CONVENTION_CONFIDENCE, EXPLICIT_CONFIDENCE, dedup_emit
+from .dialect import dedup_emit
 from .names import snake_case
 
 if TYPE_CHECKING:
@@ -56,6 +58,6 @@ class TypeOrmDialect:
             table = names[0] if names else _default_table(member.group("name"))
             if schemas:
                 table = f"{schemas[0]}.{table}"
-            confidence = EXPLICIT_CONFIDENCE if names else CONVENTION_CONFIDENCE
-            found.append((table, confidence, line_at(content, m.start())))
+            origin = ContractOrigin.EXPLICIT_TABLE if names else ContractOrigin.NAME_CONVENTION
+            found.append((table, origin, line_at(content, m.start())))
         return dedup_emit(ctx, self.name, found)

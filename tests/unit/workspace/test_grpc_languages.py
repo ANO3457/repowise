@@ -42,7 +42,7 @@ class TestCSharp:
                 "grpc::GreeterService/*",
                 "provider",
                 "cs:MapGrpcService<GreeterService>",
-                0.8,
+                0.85,
                 (("service", "GreeterService"), ("source", "csharp_mapgrpc")),
             ),
             (
@@ -51,7 +51,7 @@ class TestCSharp:
                 # The template says ServiceBase while the regex matched `GreeterBase`.
                 # Preserved verbatim from the module this replaced, quirk included.
                 "cs:extends Greeter.GreeterServiceBase",
-                0.8,
+                0.85,
                 (("service", "Greeter"), ("source", "csharp_base")),
             ),
             (
@@ -92,7 +92,7 @@ class TestTypeScript:
                 "grpc::AuthService/Login",
                 "provider",
                 "ts:@GrpcMethod('AuthService', 'Login')",
-                0.8,
+                0.85,
                 (
                     ("service", "AuthService"),
                     ("method", "Login"),
@@ -125,4 +125,4 @@ class TestPythonAndGoKeepTheirOwnRules:
             ".go",
             "pb.RegisterAuthServiceServer(s, &impl{})\nc := pb.NewAuthServiceClient(conn)\n",
         )
-        assert [(r[1], r[3]) for r in rows] == [("provider", 0.8), ("consumer", 0.7)]
+        assert [(r[1], r[3]) for r in rows] == [("provider", 0.85), ("consumer", 0.75)]

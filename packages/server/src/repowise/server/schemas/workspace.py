@@ -107,6 +107,10 @@ class WorkspaceContractEntry(BaseModel):
     #: index or nothing is declared at ``line`` — the contract still matches, it
     #: just cannot be traversed into the call graph.
     symbol_id: str | None = None
+    #: What established the contract (``route_registration``, ``client_call``,
+    #: ``sql_string``...), one of the closed origins in
+    #: ``repowise.core.workspace.origins``. None on a row stored before origins.
+    origin: str | None = None
     #: Extractor-supplied detail (``extraction_layer``, ``framework``, ``method``,
     #: ``path``, ``table``, ``package``...). Keys vary by contract type.
     meta: dict = {}
@@ -116,6 +120,10 @@ class WorkspaceContractLinkEntry(BaseModel):
     contract_id: str
     contract_type: str
     match_type: str
+    #: The matching rule that made the link (``exact_id``, ``binding_routed``,
+    #: ``prefix_stripped``...), one of ``repowise.core.workspace.origins``.
+    #: ``match_type`` is derived from it.
+    strategy: str | None = None
     confidence: float
     provider_repo: str
     provider_file: str
@@ -265,6 +273,9 @@ class WorkspaceSystemEdge(BaseModel):
     weight: int = 1
     structural: bool = True
     contract_refs: list[str] = []
+    #: Strategy of the link that gave the edge its confidence (``manifest`` on
+    #: a package edge); None on a co-change edge.
+    strategy: str | None = None
 
 
 class WorkspaceRepoDiagnostics(BaseModel):
@@ -474,6 +485,10 @@ class WorkspaceDependencyCycle(BaseModel):
     nodes: list[str] = []
     edge_ids: list[str] = []
     length: int = 0
+    #: Edge kinds on each leg (``leg_kinds[i]`` joins ``nodes[i]`` to the next).
+    leg_kinds: list[list[str]] = []
+    #: Legs only an asynchronous (event) edge joins.
+    async_legs: int = 0
 
 
 class WorkspaceConformanceResponse(BaseModel):

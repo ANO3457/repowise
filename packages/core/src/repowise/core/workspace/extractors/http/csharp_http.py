@@ -18,6 +18,8 @@ import re
 from collections.abc import Iterator
 from typing import TYPE_CHECKING
 
+from repowise.core.workspace.origins import ContractOrigin
+
 from ..langs import CSHARP
 from ..strings import CSHARP_SYNTAX
 from .client_calls import ClientCallMatch, consumer_contracts, matches_in
@@ -48,7 +50,8 @@ _BESTHTTP_RE = re.compile(
     re.IGNORECASE,
 )
 
-_CONFIDENCE = 0.70
+# HttpClient calls are read off any receiver; its type is not confirmed.
+_ORIGIN = ContractOrigin.NAME_HEURISTIC
 
 
 def httpclient_calls(content: str) -> Iterator[ClientCallMatch]:
@@ -59,7 +62,7 @@ def httpclient_calls(content: str) -> Iterator[ClientCallMatch]:
         url_group=3,
         prefix_group=2,
         method_group=1,
-        confidence=_CONFIDENCE,
+        origin=_ORIGIN,
     )
 
 
@@ -71,7 +74,7 @@ def unitywebrequest_calls(content: str) -> Iterator[ClientCallMatch]:
         url_group=3,
         prefix_group=2,
         method_group=1,
-        confidence=_CONFIDENCE,
+        origin=_ORIGIN,
     )
 
 
@@ -83,7 +86,7 @@ def besthttp_calls(content: str) -> Iterator[ClientCallMatch]:
         url_group=2,
         prefix_group=1,
         method_group=3,
-        confidence=_CONFIDENCE,
+        origin=_ORIGIN,
     )
 
 

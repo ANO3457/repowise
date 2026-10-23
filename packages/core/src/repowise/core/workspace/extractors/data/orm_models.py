@@ -17,9 +17,11 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING
 
+from repowise.core.workspace.origins import ContractOrigin
+
 from ..base import ScanContext
 from ..langs import CSHARP, JAVA, KOTLIN, PYTHON, RUBY
-from .dialect import CONVENTION_CONFIDENCE, EXPLICIT_CONFIDENCE, dedup_emit, found_names
+from .dialect import dedup_emit, found_names
 from .names import pluralize, snake_case
 
 if TYPE_CHECKING:
@@ -41,11 +43,11 @@ class SqlAlchemyDjangoDialect:
     def extract(self, ctx: ScanContext) -> list[Contract]:
         # A migration's `create_table` defines the schema; the rest model it.
         seen: set[str] = set()
-        created = found_names(self._CREATE_TABLE_RE, ctx.content, EXPLICIT_CONFIDENCE)
+        created = found_names(self._CREATE_TABLE_RE, ctx.content, ContractOrigin.DDL)
         out = dedup_emit(ctx, self.name, created, schema="create", seen=seen)
-        found = found_names(self._TABLENAME_RE, ctx.content, EXPLICIT_CONFIDENCE)
-        found += found_names(self._DB_TABLE_RE, ctx.content, EXPLICIT_CONFIDENCE)
-        found += found_names(self._SQLMODEL_RE, ctx.content, CONVENTION_CONFIDENCE, str.lower)
+        found = found_names(self._TABLENAME_RE, ctx.content, ContractOrigin.EXPLICIT_TABLE)
+        found += found_names(self._DB_TABLE_RE, ctx.content, ContractOrigin.EXPLICIT_TABLE)
+        found += found_names(self._SQLMODEL_RE, ctx.content, ContractOrigin.NAME_CONVENTION, str.lower)
         return out + dedup_emit(ctx, self.name, found, seen=seen)
 
 
@@ -62,12 +64,12 @@ class JpaDialect:
     )
 
     def extract(self, ctx: ScanContext) -> list[Contract]:
-        found = found_names(self._TABLE_RE, ctx.content, EXPLICIT_CONFIDENCE)
+        found = found_names(self._TABLE_RE, ctx.content, ContractOrigin.EXPLICIT_TABLE)
         if not found:
             # Only fall back to the class-name convention when no explicit
             # @Table names the table (one entity per file is the JPA norm).
             found = found_names(
-                self._ENTITY_CLASS_RE, ctx.content, CONVENTION_CONFIDENCE, snake_case
+                self._ENTITY_CLASS_RE, ctx.content, ContractOrigin.NAME_CONVENTION, snake_case
             )
         return dedup_emit(ctx, self.name, found)
 
@@ -82,8 +84,8 @@ class EfCoreDialect:
     _DBSET_RE = re.compile(r"\bDbSet<\s*\w+\s*>\s+(\w+)")
 
     def extract(self, ctx: ScanContext) -> list[Contract]:
-        found = found_names(self._TABLE_ATTR_RE, ctx.content, EXPLICIT_CONFIDENCE)
-        found += found_names(self._DBSET_RE, ctx.content, CONVENTION_CONFIDENCE)
+        found = found_names(self._TABLE_ATTR_RE, ctx.content, ContractOrigin.EXPLICIT_TABLE)
+        found += found_names(self._DBSET_RE, ctx.content, ContractOrigin.NAME_CONVENTION)
         return dedup_emit(ctx, self.name, found)
 
 
@@ -99,12 +101,12 @@ class ActiveRecordDialect:
     )
 
     def extract(self, ctx: ScanContext) -> list[Contract]:
-        found = found_names(self._TABLE_NAME_RE, ctx.content, EXPLICIT_CONFIDENCE)
+        found = found_names(self._TABLE_NAME_RE, ctx.content, ContractOrigin.EXPLICIT_TABLE)
         if not found:
             found = found_names(
                 self._MODEL_CLASS_RE,
                 ctx.content,
-                CONVENTION_CONFIDENCE,
+                ContractOrigin.NAME_CONVENTION,
                 lambda m: pluralize(snake_case(m)),
             )
         return dedup_emit(ctx, self.name, found)

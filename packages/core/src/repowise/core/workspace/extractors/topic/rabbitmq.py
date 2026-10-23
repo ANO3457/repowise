@@ -19,6 +19,7 @@ from repowise.core.workspace.contracts import (
     TOPIC_KIND_EXCHANGE,
     TOPIC_KIND_QUEUE,
 )
+from repowise.core.workspace.origins import ContractOrigin
 
 from ..langs import JAVA, JS_TS, PHP, PYTHON
 from ..strings import Arg
@@ -96,7 +97,7 @@ RABBITMQ = TopicDialect(
             extensions=PYTHON,
             name=Arg(keys=("queue",), pos=0),
             kind=TOPIC_KIND_QUEUE,
-            confidence=0.7,
+            origin=ContractOrigin.NAME_HEURISTIC,  # a variable named `channel`
         ),
         TopicCall(
             head=re.compile(r"channel\.basic_publish\s*\("),
@@ -105,7 +106,7 @@ RABBITMQ = TopicDialect(
             extensions=PYTHON,
             name=Arg(keys=("exchange",)),
             kind=TOPIC_KIND_EXCHANGE,
-            confidence=0.7,
+            origin=ContractOrigin.NAME_HEURISTIC,  # a variable named `channel`
             routing_key=Arg(keys=("routing_key",)),
             default_exchange=True,
         ),
@@ -116,7 +117,7 @@ RABBITMQ = TopicDialect(
             extensions=PYTHON,
             name=Arg(keys=("exchange",), pos=1),
             kind=TOPIC_KIND_BINDING,
-            confidence=0.7,
+            origin=ContractOrigin.NAME_HEURISTIC,  # a variable named `channel`
             routing_key=Arg(keys=("routing_key",), pos=2),
             queue=Arg(keys=("queue",), pos=0),
         ),

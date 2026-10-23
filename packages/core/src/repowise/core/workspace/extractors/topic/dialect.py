@@ -23,6 +23,7 @@ from repowise.core.workspace.contracts import (
     TOPIC_PREFIX,
     TOPIC_ROUTING_KEY_UNRESOLVED,
 )
+from repowise.core.workspace.origins import ContractOrigin
 
 from ..base import line_at
 from ..calls import call_sites
@@ -62,7 +63,7 @@ class TopicCall:
     extensions: frozenset[str]
     name: Arg
     kind: str = TOPIC_KIND_TOPIC
-    confidence: float = 0.8
+    origin: ContractOrigin = ContractOrigin.CLIENT_CALL
     routing_key: Arg | None = None
     queue: Arg | None = None
     default_exchange: bool = False
@@ -79,7 +80,7 @@ def topic_contract(
     kind: str,
     role: str,
     label: str,
-    confidence: float,
+    origin: ContractOrigin,
     offset: int,
     **extra: str | bool,
 ) -> Contract:
@@ -91,7 +92,7 @@ def topic_contract(
         contract_id=f"{TOPIC_PREFIX}{name.lower()}",
         role=role,
         symbol_name=f"{label}('{name}')",
-        confidence=confidence,
+        origin=origin,
         line=line_at(ctx.content, offset),
         meta=meta,
     )
@@ -145,7 +146,7 @@ def call_contracts(
                 kind=kind,
                 role=call.role,
                 label=call.label,
-                confidence=call.confidence,
+                origin=call.origin,
                 offset=offset,
                 **extra,
             )

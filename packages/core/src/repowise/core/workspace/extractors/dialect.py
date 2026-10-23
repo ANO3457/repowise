@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Protocol
 
+from repowise.core.workspace.origins import ContractOrigin, origin_confidence
+
 from .base import ScanContext, select_files
 
 if TYPE_CHECKING:
@@ -55,11 +57,16 @@ def build_contract(
     contract_id: str,
     role: str,
     symbol_name: str,
-    confidence: float,
+    origin: ContractOrigin,
     line: int | None,
     meta: dict,
 ) -> Contract:
-    """A :class:`Contract` read from *ctx*'s file. The service is assigned later."""
+    """A :class:`Contract` read from *ctx*'s file. The service is assigned later.
+
+    A dialect declares *origin*, what established the contract, from the closed
+    vocabulary in :mod:`..origins`; the confidence is the origin's, never a
+    number of the dialect's own.
+    """
     from repowise.core.workspace.contracts import Contract
 
     return Contract(
@@ -69,10 +76,11 @@ def build_contract(
         role=role,
         file_path=ctx.rel_path,
         symbol_name=symbol_name,
-        confidence=confidence,
+        confidence=origin_confidence(origin),
         service=None,
         line=line,
         meta=meta,
+        origin=origin,
     )
 
 

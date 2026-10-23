@@ -11,6 +11,8 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING
 
+from repowise.core.workspace.origins import ContractOrigin
+
 from ..dialect import build_contract
 from .paths import (
     absolute_host,
@@ -77,7 +79,7 @@ def build_provider_contract(
     path_raw: str,
     framework: str,
     line: int | None = None,
-    confidence: float = 0.85,
+    origin: ContractOrigin = ContractOrigin.ROUTE_REGISTRATION,
     handler: str | None = None,
 ) -> Contract | None:
     """Build a provider contract, or ``None`` if the path is unusable.
@@ -101,7 +103,7 @@ def build_provider_contract(
         contract_type="http",
         role="provider",
         symbol_name=f"{framework}:{method} {path_raw}",
-        confidence=confidence,
+        origin=origin,
         line=line,
         meta={
             "method": method,
@@ -119,7 +121,7 @@ def build_consumer_contract(
     url: str,
     client: str,
     line: int | None = None,
-    confidence: float = 0.75,
+    origin: ContractOrigin = ContractOrigin.CLIENT_CALL,
 ) -> Contract | None:
     """Build a consumer contract from a raw client-call URL.
 
@@ -142,7 +144,7 @@ def build_consumer_contract(
         contract_type="http",
         role="consumer",
         symbol_name=f"{client}:{method} {url}",
-        confidence=confidence,
+        origin=origin,
         line=line,
         meta=consumer_meta(method, norm_path, client, base_token, host),
     )

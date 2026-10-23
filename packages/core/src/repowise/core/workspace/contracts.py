@@ -26,6 +26,7 @@ from repowise.core.workspace.config import (
     ensure_workspace_data_dir,
 )
 from repowise.core.workspace.contract_schema import ContractSchema
+from repowise.core.workspace.origins import LinkStrategy, legacy_strategy
 from repowise.core.workspace.signature_schema import attach_signature_schemas
 
 if TYPE_CHECKING:
@@ -65,7 +66,10 @@ CONTRACTS_FILENAME = "contracts.json"
 # Version 13 adds Angular HttpClient calls, with bases folded from environment
 # files and class fields.
 # Version 14 adds MassTransit message-type topic contracts (C# and VB.NET).
-CONTRACTS_VERSION = 14
+# Version 15 stamps each contract with its origin and each link with its
+# strategy (see :mod:`.origins`), and stops linking a Laravel job class to a
+# publisher that is not Laravel.
+CONTRACTS_VERSION = 15
 
 #: ``meta["kind"]`` of a topic contract: the destination a broker call names.
 #: A queue is read by one consumer group; a topic, subject or channel fans
@@ -104,7 +108,7 @@ class Contract:
     role: str  # "provider" | "consumer"
     file_path: str  # relative to repo root
     symbol_name: str  # handler name, service.method, etc. — display only
-    confidence: float  # 0.7–0.9 based on extraction strategy
+    confidence: float  # the origin's confidence, see :data:`.origins.ORIGIN_CONFIDENCE`
     service: str | None = None  # service boundary path (monorepo)
     #: 1-indexed line of the declaration or call this contract was read from.
     #: The key :func:`bind_symbol_ids` binds against, and what says *where* a
@@ -119,12 +123,15 @@ class Contract:
     # Optional request/response shape — populated by dialects that can recover
     # it (proto message fields today). Drives schema-level breaking-change diffs.
     schema: ContractSchema | None = None
+    #: What established this contract, a :class:`.origins.ContractOrigin`. None
+    #: on a row stored before origins existed.
+    origin: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
         if d["service"] is None:
             del d["service"]
-        for optional in ("line", "symbol_id"):
+        for optional in ("line", "symbol_id", "origin"):
             if d[optional] is None:
                 del d[optional]
         if not d["meta"]:
@@ -152,6 +159,7 @@ class Contract:
             symbol_id=data.get("symbol_id"),
             meta=data.get("meta", {}),
             schema=ContractSchema.from_dict(raw_schema) if raw_schema else None,
+            origin=data.get("origin"),
         )
 
 
@@ -161,7 +169,7 @@ class ContractLink:
 
     contract_id: str
     contract_type: str  # "http" | "grpc" | "socket" | "topic" | "data" | "code"
-    match_type: str  # "exact" | "candidate" | "manual"
+    match_type: str  # "exact" | "candidate" | "manual", derived from ``strategy``
     confidence: float
     provider_repo: str
     provider_file: str
@@ -181,6 +189,8 @@ class ContractLink:
     #: or a path matched across case, a wildcard method or a mount prefix.
     #: None when both ends share ``contract_id``.
     consumer_contract_id: str | None = None
+    #: The matching rule that made this link, a :class:`.origins.LinkStrategy`.
+    strategy: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
@@ -188,17 +198,23 @@ class ContractLink:
             del d["provider_service"]
         if d["consumer_service"] is None:
             del d["consumer_service"]
-        for optional in ("provider_symbol_id", "consumer_symbol_id", "consumer_contract_id"):
+        for optional in (
+            "provider_symbol_id",
+            "consumer_symbol_id",
+            "consumer_contract_id",
+            "strategy",
+        ):
             if d[optional] is None:
                 del d[optional]
         return d
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ContractLink:
+        match_type = data.get("match_type", "exact")
         return cls(
             contract_id=data["contract_id"],
             contract_type=data["contract_type"],
-            match_type=data.get("match_type", "exact"),
+            match_type=match_type,
             confidence=data.get("confidence", 1.0),
             provider_repo=data["provider_repo"],
             provider_file=data["provider_file"],
@@ -211,6 +227,8 @@ class ContractLink:
             provider_symbol_id=data.get("provider_symbol_id"),
             consumer_symbol_id=data.get("consumer_symbol_id"),
             consumer_contract_id=data.get("consumer_contract_id"),
+            # A store written before strategies existed: read its match_type.
+            strategy=data.get("strategy") or legacy_strategy(match_type),
         )
 
 
@@ -407,6 +425,7 @@ def _build_manual_links(
                     contract_type=ml.contract_type,
                     match_type="manual",
                     confidence=1.0,
+                    strategy=LinkStrategy.MANUAL,
                     provider_repo=ml.to_repo,
                     provider_file="",
                     provider_symbol="",
@@ -424,6 +443,7 @@ def _build_manual_links(
                     contract_type=ml.contract_type,
                     match_type="manual",
                     confidence=1.0,
+                    strategy=LinkStrategy.MANUAL,
                     provider_repo=ml.from_repo,
                     provider_file="",
                     provider_symbol="",

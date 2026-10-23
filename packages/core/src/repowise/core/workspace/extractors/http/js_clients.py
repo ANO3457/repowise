@@ -14,6 +14,8 @@ import re
 from collections.abc import Iterator
 from typing import TYPE_CHECKING
 
+from repowise.core.workspace.origins import ContractOrigin
+
 from ..calls import receiver_name
 from ..langs import JS_TS
 from ..strings import JS_SYNTAX, literal_span, string_constants
@@ -107,7 +109,7 @@ def wrapper_calls(content: str, clients: frozenset[str]) -> Iterator[ClientCallM
             offset=m.start(),
             callee=callee,
             method=method_opt.group(1).upper() if method_opt else None,
-            confidence=0.65,
+            origin=ContractOrigin.NAME_HEURISTIC,
         )
 
 

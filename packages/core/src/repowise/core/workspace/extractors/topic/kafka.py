@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 
 from repowise.core.workspace.contracts import TOPIC_PATTERN_REGEX
+from repowise.core.workspace.origins import ContractOrigin
 
 from ..langs import GO, JAVA, JS_TS, PYTHON
 from ..strings import Arg, unescape_backslashes
@@ -59,7 +60,6 @@ KAFKA = TopicDialect(
             label="KafkaConsumer",
             extensions=PYTHON,
             name=_FIRST,
-            confidence=0.7,
         ),
         TopicCall(
             head=re.compile(r"producer\.produce\s*\("),
@@ -67,7 +67,7 @@ KAFKA = TopicDialect(
             label="producer.produce",
             extensions=PYTHON | JS_TS,
             name=Arg(keys=("topic",), pos=0),
-            confidence=0.7,
+            origin=ContractOrigin.NAME_HEURISTIC,  # read off a variable named `producer`
         ),
         TopicCall(
             head=re.compile(r"ConsumePartition\s*\("),
@@ -75,7 +75,6 @@ KAFKA = TopicDialect(
             label="ConsumePartition",
             extensions=GO,
             name=_FIRST,
-            confidence=0.7,
         ),
     ),
 )

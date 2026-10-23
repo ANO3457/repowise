@@ -11,6 +11,7 @@ from repowise.core.workspace.contracts import (
     normalize_contract_id,
     same_service,
 )
+from repowise.core.workspace.origins import LinkStrategy, link_confidence, match_type_for
 
 
 def internal(provider: Contract, consumer: Contract) -> bool:
@@ -60,12 +61,16 @@ class MatchState:
         self,
         consumer: Contract,
         provider: Contract,
-        match_type: str,
-        confidence: float,
+        strategy: LinkStrategy,
         *,
+        via: Contract | None = None,
         via_alias: bool = False,
     ) -> bool:
-        """Record one link unless an identical one exists; True when it was added.
+        """Record one link made by *strategy* unless an identical one exists; True when added.
+
+        Its confidence is the weakest of the two ends (and *via*, the binding a
+        queue was reached through) scaled by the strategy's, and its
+        ``match_type`` is the strategy's (see :mod:`..origins`).
 
         A link's ``contract_id`` is the provider's id, and ``consumer_contract_id``
         the consumer's whenever it is spelled differently (another case, a
@@ -90,8 +95,13 @@ class MatchState:
             ContractLink(
                 contract_id=provider.contract_id,
                 contract_type=consumer.contract_type,
-                match_type=match_type,
-                confidence=confidence,
+                match_type=match_type_for(strategy),
+                confidence=link_confidence(
+                    strategy,
+                    provider.confidence,
+                    consumer.confidence,
+                    *((via.confidence,) if via is not None else ()),
+                ),
                 provider_repo=provider.repo,
                 provider_file=provider.file_path,
                 provider_symbol=provider.symbol_name,
@@ -105,6 +115,7 @@ class MatchState:
                 consumer_contract_id=(
                     consumer.contract_id if consumer.contract_id != provider.contract_id else None
                 ),
+                strategy=strategy,
             )
         )
         self.matched.add(id(consumer))
