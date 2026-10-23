@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json as _json
 import logging
 from collections.abc import Awaitable
 from pathlib import Path
@@ -19,6 +20,10 @@ if TYPE_CHECKING:
     from repowise.core.workspace.system_graph import SystemGraph
 
 _log = logging.getLogger("repowise.workspace.update")
+
+#: Which ``contracts:`` and ``conformance:`` settings the last cross-repo
+#: analysis ran with, in ``.repowise-workspace/``.
+ANALYSIS_CONFIG_FILENAME = "analysis_config.json"
 
 
 def _log_phase(timings: PhaseTimingRecorder, phase: str, **counts: int) -> None:
@@ -59,14 +64,18 @@ async def run_cross_repo_hooks(
     timings = PhaseTimingRecorder()
 
     # One read connection per repo serves all five phases; only the HTTP
-    # extractor reads it, so nothing is opened when that is off.
+    # extractor reads it, so nothing is opened when that is off. Deferred:
+    # extraction opens only the repos it re-extracts and the packages they
+    # import, so a run with one repo changed loads one repo's symbols.
     workspace_index = (
-        await open_workspace_index(ws_config, workspace_root)
+        await open_workspace_index(ws_config, workspace_root, deferred=True)
         if ws_config.contracts.detect_http
         else WorkspaceIndex({})
     )
     try:
-        await _run_phases(ws_config, workspace_root, changed_repos, timings, workspace_index)
+        settled = await _run_phases(
+            ws_config, workspace_root, changed_repos, timings, workspace_index
+        )
     finally:
         await workspace_index.close()
 
@@ -81,12 +90,54 @@ async def run_cross_repo_hooks(
     timings.on_phase_done("workspace_store")
     _log_phase(timings, "workspace_store")
 
+    # A failed extraction or graph is retried on the next update rather than
+    # stamped as having run under these settings.
+    if settled:
+        stamp_analysis_config(ws_config, workspace_root)
+
     # Each updated repo snapshotted its components before contracts were
     # extracted at its new commit; measure them now.
     for alias in changed_repos:
         entry = ws_config.get_repo(alias)
         if entry is not None:
             await _refresh_contract_facts((workspace_root / entry.path).resolve())
+
+
+def analysis_config_changed(ws_config: WorkspaceConfig, workspace_root: Path) -> bool:
+    """Whether the cross-repo settings differ from those the last analysis ran with.
+
+    No stamp counts as changed: the analysis never ran, or ran before stamps
+    existed, and one run settles it. A workspace too small for the analysis
+    never changes.
+    """
+    if len(ws_config.repos) < 2:
+        return False
+    try:
+        stamp = _json.loads(_stamp_path(workspace_root).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return True
+    return not isinstance(stamp, dict) or stamp.get("fingerprint") != ws_config.analysis_fingerprint()
+
+
+def stamp_analysis_config(ws_config: WorkspaceConfig, workspace_root: Path) -> None:
+    """Record the cross-repo settings this analysis ran with. Best-effort."""
+    from ...fsutils import atomic_write_text
+    from ..config import WORKSPACE_DATA_DIR
+
+    try:
+        (workspace_root / WORKSPACE_DATA_DIR).mkdir(parents=True, exist_ok=True)
+        atomic_write_text(
+            _stamp_path(workspace_root),
+            _json.dumps({"fingerprint": ws_config.analysis_fingerprint()}),
+        )
+    except OSError:
+        _log.warning("Could not stamp the cross-repo analysis config", exc_info=True)
+
+
+def _stamp_path(workspace_root: Path) -> Path:
+    from ..config import WORKSPACE_DATA_DIR
+
+    return workspace_root / WORKSPACE_DATA_DIR / ANALYSIS_CONFIG_FILENAME
 
 
 async def _refresh_contract_facts(repo_path: Path) -> None:
@@ -116,8 +167,11 @@ async def _run_phases(
     changed_repos: list[str],
     timings: PhaseTimingRecorder,
     workspace_index: WorkspaceIndex,
-) -> None:
-    """The five cross-repo phases, over an already-open workspace index."""
+) -> bool:
+    """The five cross-repo phases, over an already-open workspace index.
+
+    True when extraction and the system graph both succeeded.
+    """
     from ..contracts import ContractStore, load_contract_store
 
     boundaries_by_repo = await _boundaries_phase(ws_config, workspace_root, timings)
@@ -149,6 +203,7 @@ async def _run_phases(
         _conformance_phase(ws_config, workspace_root, timings, system_graph)
 
     _log.info("Cross-repo phase timings (seconds): %s", timings.timings)
+    return extraction_ok and system_graph is not None
 
 
 async def _boundaries_phase(

@@ -113,6 +113,7 @@ def _workspace_update(
     if scan.stale_count == 0:
         console.print("[green]All repos are up to date.[/green]")
         if not dry_run:
+            _rerun_analysis_if_config_changed(ws_root, ws_config, started_at)
             _refresh_workspace_editor_project_files(
                 ws_root=ws_root,
                 ws_config=ws_config,
@@ -159,6 +160,29 @@ def _workspace_update(
         agents_md=agents_md,
         include_working_tree=include_working_tree,
     )
+
+
+def _rerun_analysis_if_config_changed(ws_root: Path, ws_config: Any, started_at: datetime) -> None:
+    """Re-run the cross-repo analysis when only its settings changed.
+
+    An edited ``contracts:`` or ``conformance:`` block moves no repo, so the
+    staleness scan alone would leave the edit without effect until some repo
+    changed. Settings that only affect matching re-link the stored contracts
+    without reading any repo.
+    """
+    from repowise.core.workspace.update import analysis_config_changed, run_cross_repo_hooks
+
+    if not analysis_config_changed(ws_config, ws_root):
+        return
+    console.print("Workspace settings changed: re-running cross-repo analysis...")
+    try:
+        run_async(run_cross_repo_hooks(ws_config, ws_root, []))
+    except Exception as exc:
+        # The editor files still refresh; the next update retries the analysis.
+        console.print(f"[yellow]Cross-repo analysis failed: {exc}[/yellow]")
+        return
+    console.print("[green]Cross-repo analysis updated.[/green]")
+    _print_breaking_changes(ws_root, started_at)
 
 
 @dataclass
@@ -472,6 +496,7 @@ def _workspace_docs_update(
 
     from repowise.cli.commands.workspace_cmd import inherit_workspace_distill_verdict
     from repowise.core.workspace.update import (
+        analysis_config_changed,
         run_cross_repo_hooks,
         sync_workspace_state_from_disk,
     )
@@ -523,8 +548,11 @@ def _workspace_docs_update(
         with suppress(Exception):
             inherit_workspace_distill_verdict((ws_root / entry.path).resolve())
 
-    # Cross-repo hooks once, over the union of index-only and docs repos.
-    if changed_aliases and len(ws_config.repos) >= 2:
+    # Cross-repo hooks once, over the union of index-only and docs repos, or
+    # for an edited contracts: or conformance: block with no repo changed.
+    if len(ws_config.repos) >= 2 and (
+        changed_aliases or analysis_config_changed(ws_config, ws_root)
+    ):
         console.print("Running cross-repo analysis...")
         with suppress(Exception):
             run_async(run_cross_repo_hooks(ws_config, ws_root, changed_aliases))

@@ -546,7 +546,7 @@ async def run_contract_extraction(
     mislabel both. Matching is dict-indexed and costs milliseconds against
     seconds of extraction, so scoping it would buy nothing and risk everything.
     """
-    from .code_api import CodeSurface, build_code_surface
+    from .code_api import CodeSurface, build_code_surface, find_workspace_packages
     from .extractors import build_message_type_index
     from .extractors.base import make_exclude_predicate
     from .extractors.masstransit import MessageTypeIndex
@@ -560,13 +560,13 @@ async def run_contract_extraction(
     if len(repo_paths) < 2:
         return ContractStore()
 
-    # Built once, workspace-wide: a code consumer only exists when some *other*
-    # repo publishes the package it imports, so neither half of it can be
-    # decided inside one repo's extraction.
-    code_surface = (
-        await asyncio.to_thread(build_code_surface, repo_paths, workspace_index, exclude)
-        if contract_config.detect_code_api
-        else CodeSurface()
+    # Workspace-wide: a code consumer only exists when some *other* repo
+    # publishes the package it imports. Manifests alone name the packages; the
+    # symbol indexes behind them are opened below, only when a repo is extracted.
+    packages = (
+        await asyncio.to_thread(find_workspace_packages, repo_paths)
+        if contract_config.detect_code_api and workspace_index is not None
+        else ([], {})
     )
 
     # A MassTransit consumer resolves its message type against every repo's
@@ -580,13 +580,30 @@ async def run_contract_extraction(
     )
 
     prior = previous_store or ContractStore()
-    config_fp = _extraction_config_fingerprint(contract_config, code_surface, message_types)
+    config_fp = _extraction_config_fingerprint(
+        contract_config, {p.name for p in packages[0]}, message_types
+    )
     heads: dict[str, str | None] = {}
     reusable = await _reusable_repos(
         repo_paths, previous_store, prior, set(changed_repos), config_fp, heads
     )
     to_extract = {alias: path for alias, path in repo_paths.items() if alias not in reusable}
     await _probe_missing_heads(to_extract, heads)
+
+    # A reused repo keeps its stored rows, so only the extracted repos, and the
+    # packages they may import, need their symbols loaded.
+    code_surface = CodeSurface()
+    if to_extract and workspace_index is not None:
+        await workspace_index.ensure({*to_extract, *(p.repo for p in packages[0])})
+        if contract_config.detect_code_api:
+            code_surface = await asyncio.to_thread(
+                build_code_surface,
+                repo_paths,
+                workspace_index,
+                exclude,
+                packages=packages,
+                consumers=to_extract,
+            )
 
     extraction = _RepoExtraction(
         contract_config=contract_config,
@@ -652,16 +669,24 @@ def _indexed_repo_paths(ws_config: WorkspaceConfig, workspace_root: Path) -> dic
 
 
 def _extraction_config_fingerprint(
-    contract_config: Any, code_surface: CodeSurface, message_types: MessageTypeIndex
+    contract_config: Any, package_names: set[str], message_types: MessageTypeIndex
 ) -> str:
     """Fingerprint of everything that decides what extraction looks for.
 
-    The contract settings, plus the published-package and message-type sets:
-    both depend on *other* repos, so a change there moves no HEAD here.
+    The contract settings that feed extraction, plus the published-package and
+    message-type sets: both depend on *other* repos, so a change there moves no
+    HEAD here. Matching settings stay out: they re-link the stored rows, which
+    every run does anyway, so editing one re-extracts nothing.
     """
+    from .config import STAGE_EXTRACTION
+
     return hashlib.sha256(
         json.dumps(
-            [contract_config.to_dict(), sorted(code_surface.members), sorted(message_types.fqns)],
+            [
+                contract_config.stage_dict(STAGE_EXTRACTION),
+                sorted(package_names),
+                sorted(message_types.fqns),
+            ],
             sort_keys=True,
         ).encode()
     ).hexdigest()[:16]

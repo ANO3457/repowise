@@ -619,6 +619,7 @@ No. Repowise searches upward for `.repowise-workspace.yaml` and uses the first o
 ```bash
 repowise update              # Update the primary repo
 repowise update --workspace  # Update all workspace repos
+repowise workspace update    # The same command
 ```
 
 Each stale repo picks docs vs index-only the same way a single-repo update does, from its own `docs_enabled` (set at init) plus any override on the command. Repos with docs enabled regenerate their wiki (pages, diagrams, decisions) through the full docs path, so a workspace wiki stays as fresh as one you update repo by repo; the rest just refresh the index. Force docs everywhere with `repowise update --workspace --docs` (each repo needs an LLM provider/key, or pass `--provider`), or keep it index-only with `--no-docs`.
@@ -631,7 +632,7 @@ repowise watch --workspace
 
 ### How do I re-run just the cross-repo analysis?
 
-Cross-repo analysis runs during `repowise init .` and `repowise update --workspace`. To force a re-run, run `repowise init .` again; it detects existing indexes and only re-runs what is needed.
+Cross-repo analysis runs during `repowise init .` and `repowise update --workspace`. An update re-runs it when any repo changed, or when the `contracts:` or `conformance:` block of `.repowise-workspace.yaml` changed with every repo up to date. Editing `service_bases` or `manual_links` re-links the stored contracts without re-reading any repo; the other `contracts:` settings re-extract every repo. `repowise init .` re-indexes every repo, so it is not the way to refresh this.
 
 ### Does the MCP server handle multiple repos?
 
