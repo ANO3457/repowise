@@ -55,6 +55,8 @@ class _CloudStreamPass:
 
         if "StreamBridge" in content:
             for m in _STREAM_BRIDGE_SEND_RE.finditer(content):
+                if ctx.in_comment(m.start()):
+                    continue
                 target = m.group(1)
                 self._send_calls.append((ctx, target, m.start()))
 
@@ -62,13 +64,15 @@ class _CloudStreamPass:
         current_binding: tuple[str, int] | None = None
         current_indent = -1
         offset = 0
+        comment_prefixes = ("#", "!") if ctx.suffix == ".properties" else ("#",)
         for line in content.splitlines(keepends=True):
+            if not line.strip() or line.lstrip().startswith(comment_prefixes):
+                offset += len(line)
+                continue
             m_flat = _FLAT_RE.search(line)
             m_b = _BINDING_KEY_RE.search(line)
             if m_flat:
-                self._record_binding(
-                    ctx, m_flat.group(1).split(".")[-1], m_flat.group(2), offset
-                )
+                self._record_binding(ctx, m_flat.group(1).split(".")[-1], m_flat.group(2), offset)
             elif m_b:
                 current_indent = len(m_b.group(1))
                 current_binding = (m_b.group(2), offset)
@@ -94,9 +98,7 @@ class _CloudStreamPass:
         self._record_binding(ctx, binding[0], m_d.group(1), binding[1])
         return None
 
-    def _record_binding(
-        self, ctx: ScanContext, b_name: str, dest: str, offset: int
-    ) -> None:
+    def _record_binding(self, ctx: ScanContext, b_name: str, dest: str, offset: int) -> None:
         self._binding_destinations[b_name] = dest
         role = "consumer" if "-in-" in b_name else "provider"
         self._binding_rows.append((ctx, b_name, dest, role, offset))

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from repowise.core.workspace.extractors.topic import TopicExtractor
 from repowise.core.workspace.matching import match_contracts
 from repowise.core.workspace.origins import ContractOrigin
@@ -120,3 +122,50 @@ def test_cloud_stream_isolated_from_kafka_topic(tmp_path: Path) -> None:
         "k",
     )
     assert [lk for lk in match_contracts(cs + k) if lk.contract_type == "topic"] == []
+
+
+@pytest.mark.parametrize("gap", ["\n", "\n\n", "   \n", "# comment\n", "  # comment\n"])
+def test_blank_or_comment_lines_do_not_close_a_nested_binding(tmp_path, gap):
+    source = (
+        "spring:\n  cloud:\n    stream:\n      bindings:\n        orders-out-0:\n"
+        + gap
+        + "          destination: orders\n"
+    )
+    rows = _extract(tmp_path, "application.yml", source)
+    assert _ids(rows, "provider") == ["topic::orders"]
+
+
+@pytest.mark.parametrize("suffix", [".java", ".kt"])
+@pytest.mark.parametrize(
+    "comment",
+    ['// streamBridge.send("orders", payload);', '/* streamBridge.send("orders", payload); */'],
+)
+def test_commented_send_cannot_claim_the_live_send_identity(tmp_path, suffix, comment):
+    field = (
+        "lateinit var streamBridge: StreamBridge"
+        if suffix == ".kt"
+        else "StreamBridge streamBridge;"
+    )
+    method = "fun send(payload: Any)" if suffix == ".kt" else "void send(Object payload)"
+    source = (
+        f"class Sender {{\n  {field}\n  {method} {{\n    "
+        + comment
+        + '\n    streamBridge.send("orders", payload);\n  }\n}\n'
+    )
+    rows = _extract(tmp_path, "Sender" + suffix, source)
+    assert _ids(rows, "provider") == ["topic::orders"]
+    assert rows[0].line == 5
+
+
+@pytest.mark.parametrize(
+    ("suffix", "comment"), [(".yml", "#"), (".properties", "#"), (".properties", "!")]
+)
+def test_commented_property_does_not_hide_or_create_a_provider(tmp_path, suffix, comment):
+    source = (
+        f"{comment} spring.cloud.stream.bindings.old-out-0.destination=orders\n"
+        "spring.cloud.stream.bindings.live-out-0.destination=orders\n"
+    )
+    rows = _extract(tmp_path, "application" + suffix, source)
+    assert _ids(rows, "provider") == ["topic::orders"]
+    assert rows[0].line == 2
+    assert _extract(tmp_path, "application" + suffix, source.splitlines(keepends=True)[0]) == []
