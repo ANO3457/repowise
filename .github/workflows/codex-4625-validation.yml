@@ -1,0 +1,44 @@
+name: Validate interpolation review fixes
+on:
+  push:
+    branches: [validation/codex24-4625]
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.11', '3.12', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Exact product and locked dependencies
+        run: |
+          git checkout cd73e94c29fb895ba6a103625cf2db0996677c87
+          uv python install ${{ matrix.python }}
+          uv sync --all-packages --python ${{ matrix.python }}
+      - name: Regression and source gates
+        run: |
+          uv run pytest tests/unit/analysis/test_security_scan.py tests/unit/analysis/test_security_scan_golden.py tests/unit/analysis/test_security_scan_history.py tests/unit/workspace/test_dialect_comments.py tests/unit/server/mcp/test_answer_backtick_masking.py tests/unit/server/mcp/test_answer_mask_containment.py -q --junitxml=focus.xml
+          uv run ruff check .
+          uv run ruff format --check packages/core/src/repowise/core/analysis/security/masking.py
+          uv run ruff format --check --range=1767 tests/unit/analysis/test_security_scan.py
+          git diff --check
+          git diff --exit-code 55a42fb370d88b3e02285e25f31f7863b5767b93 HEAD -- package.json package-lock.json packages/web packages/ui packages/types packages/vscode
+      - name: Required provider and unit suites
+        if: matrix.python == '3.12'
+        run: uv run pytest tests/providers/ tests/unit/ -n 4 --dist loadfile -q --junitxml=required.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pr4625-${{ matrix.python }}
+          path: |
+            focus.xml
+            required.xml
