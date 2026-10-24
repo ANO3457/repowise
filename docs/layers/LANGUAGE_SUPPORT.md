@@ -270,7 +270,8 @@ This table is why a language is Full and not Good.
 | Java | ✅ | ✅ | ✅ | no | no | ✅ | ✅ |
 | Go | ✅ | n/a | ✅ | no | no | ✅ | ✅ |
 | Rust, C++, C# | ✅ | ✅ | ✅ | no | no | ✅ | ✅ |
-| Scala, Ruby | ✅ | ✅ | ✅ | no | no | no | ✅ |
+| Scala | ✅ | ✅ | ✅ | no | no | ✅ | ✅ |
+| Ruby | ✅ | ✅ | ✅ | no | no | no | ✅ |
 | Kotlin | ✅ | ✅ | ✅ | no | no | no | ✅ |
 | Dart | ✅ | ✅ | ✅ | no | no | no | ✅ |
 | Object Pascal | ✅ | n/a | ✅ | n/a | n/a | no | ✅ |
@@ -319,7 +320,7 @@ The full list per language, with the mechanics behind each gap, is in
 |----------|------|
 | Vue, Svelte | Template binding forms (`v-for`, `{#each}`) |
 | Kotlin | Extract Method, which needs a grammar that labels control flow |
-| Scala, Ruby | Extract Method (dataflow dialect) |
+| Ruby | Extract Method (dataflow dialect) |
 | GDScript | Health markers (complexity, performance, dataflow) |
 | Object Pascal | A dedicated `uses` resolver |
 | COBOL | Dialect coverage, health markers beyond complexity |
