@@ -1,0 +1,43 @@
+name: Validate Cloud Stream review fixes
+on:
+  push:
+    branches: [validation/codex24-4640]
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.11', '3.12', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Exact product and locked dependencies
+        run: |
+          git checkout 86a19a2c50c25a76f4e49c5cdeda03c138c7385e
+          uv python install ${{ matrix.python }}
+          uv sync --all-packages --python ${{ matrix.python }}
+      - name: Regression and source gates
+        run: |
+          uv run pytest tests/unit/workspace/test_cloud_stream_topics.py tests/unit/workspace/test_data_contracts.py tests/unit/workspace/test_dialect_comments.py tests/unit/workspace/test_topic_dialects.py tests/unit/workspace/test_topic_matching.py -q --junitxml=focus.xml
+          uv run ruff check .
+          uv run ruff format --check packages/core/src/repowise/core/workspace/extractors/topic/cloud_stream.py tests/unit/workspace/test_cloud_stream_topics.py
+          git diff --check
+          git diff --exit-code 64b2d3cce792dc0a21f1b4fdcebe69788510131c HEAD -- package.json package-lock.json packages/web packages/ui packages/types packages/vscode
+      - name: Required provider and unit suites
+        if: matrix.python == '3.12'
+        run: uv run pytest tests/providers/ tests/unit/ -n 4 --dist loadfile -q --junitxml=required.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pr4640-${{ matrix.python }}
+          path: |
+            focus.xml
+            required.xml
