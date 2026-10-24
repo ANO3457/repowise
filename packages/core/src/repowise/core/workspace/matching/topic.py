@@ -102,6 +102,18 @@ def pattern_matches(syntax: str, pattern: str, name: str) -> bool:
 def matching_keys(consumer: Contract, provider_index: dict[str, list[Contract]]) -> list[str]:
     """The provider keys *consumer* reaches: its own id, and every name its pattern matches."""
     keys = find_matching_keys(consumer.contract_id, provider_index)
+    if consumer.meta.get("broker") == "celery":
+        c_topic = str(consumer.meta.get("topic", "")).lower()
+        c_func = c_topic.split(".")[-1]
+        for k in provider_index:
+            if k.startswith(TOPIC_PREFIX) and k not in keys:
+                p_topic = k[len(TOPIC_PREFIX) :].lower()
+                p_func = p_topic.split(".")[-1]
+                if p_func == c_func:
+                    for p in provider_index[k]:
+                        if p.meta.get("broker") == "celery":
+                            keys.append(k)
+                            break
     syntax = consumer.meta.get(TOPIC_PATTERN)
     pattern = str(consumer.meta.get("topic", ""))
     if not syntax or not _WILDCARD_CHARS_RE.sub("", pattern):
@@ -120,7 +132,7 @@ def matching_keys(consumer: Contract, provider_index: dict[str, list[Contract]])
 # is configured outside the code (RabbitMQ, SQS, Redis, Kafka, NATS), so either
 # meets any broker but those. Every other pair must be the same broker: a Kafka
 # topic and a RabbitMQ queue that share a name are two things.
-_OWN_KIND_ONLY = frozenset({"bullmq"})
+_OWN_KIND_ONLY = frozenset({"bullmq", "celery"})
 _ANY_TRANSPORT = frozenset({"laravel", "nestjs"})
 
 
