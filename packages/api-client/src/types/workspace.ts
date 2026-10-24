@@ -297,3 +297,6 @@ export type WorkspaceConformanceResponse = ConformanceReport;
 
 /** `GET /api/workspace/architecture` — architecture-complexity metrics + roles. */
 export type WorkspaceArchitectureResponse = ArchitectureMetrics;
+
+/** `GET /api/workspace/estate` — the estate report `repowise report estate` prints. */
+export type { EstateReport as WorkspaceEstateResponse } from "@repowise-dev/types";
