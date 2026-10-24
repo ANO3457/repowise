@@ -27,12 +27,15 @@ from .csharp_http import CSharpHttpDialect
 from .django import DjangoDialect
 from .express import ExpressDialect
 from .fastapi import FastApiDialect
+from .fastify import FastifyDialect
 from .flask import FlaskDialect
 from .go import GoDialect
 from .go_clients import GoClientsDialect
+from .hapi import HapiDialect
 from .java_clients import JavaClientsDialect, MicroProfileClientsDialect, SpringClientsDialect
 from .jaxrs import JaxRsDialect
 from .js_clients import JsClientsDialect
+from .koa import KoaDialect
 from .kotlin_clients import KotlinClientsDialect
 from .laravel import LaravelDialect
 from .micronaut import MicronautDialect
@@ -76,6 +79,9 @@ PROVIDER_DIALECTS: tuple[ContractDialect, ...] = (
     RemixDialect(),
     ApexRestDialect(),
     AzureFunctionsDialect(),
+    FastifyDialect(),
+    HapiDialect(),
+    KoaDialect(),
 )
 
 # HTTP-client call recognisers (one client/language each).
