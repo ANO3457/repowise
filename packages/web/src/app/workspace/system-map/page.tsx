@@ -44,6 +44,7 @@ import { markSystemMap, useSystemMapPerfMarks } from "@/lib/system-map-perf";
 import { mapLede, mapRibbon, useListJoin, type Translator } from "./map-summary";
 import { useRepoContracts } from "./use-repo-contracts";
 import { useServiceLinks } from "./use-service-links";
+import { loadRouteLinks, useSystemMapNavCopy } from "./use-system-map-nav";
 
 const LENSES: readonly SystemMapLens[] = ["none", "blast", "breaking", "conformance", "core"];
 /** URL params a selection is written to, one per selection type. */
@@ -62,6 +63,7 @@ function contractsHref(repo: string): string {
 export default function SystemMapPage() {
   const t = useTranslations("systemMap");
   const tLinks = useTranslations("linkCoverage");
+  const navCopy = useSystemMapNavCopy();
   const join = useListJoin();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -258,6 +260,8 @@ export default function SystemMapPage() {
             onPhase={markSystemMap}
             drawer={drawer}
             loadLinksBetween={loadLinksBetween}
+            loadRoutes={loadRouteLinks}
+            navCopy={navCopy}
             toolbar={
               <SystemMapLensControl
                 value={lens}

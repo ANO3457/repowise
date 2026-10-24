@@ -40,6 +40,8 @@ export interface SystemMapRoutesPanelProps {
   between: BetweenResult;
   families: ReadonlySet<EdgeFamily>;
   loadLinksBetween?: LoadLinksBetween | undefined;
+  /** The filter box's starting text, e.g. the route a search pick named. */
+  initialFilter?: string | undefined;
   contractHref?: ((ref: ContractRef) => string) | undefined;
   /** The Contracts page filtered to one repository. */
   contractsHref?: ((repo: string) => string) | undefined;
@@ -55,7 +57,7 @@ const BUTTON =
 
 export function SystemMapRoutesPanel(props: SystemMapRoutesPanelProps) {
   const { graph, between, families } = props;
-  const [filter, setFilter] = useState("");
+  const [filter, setFilter] = useState(props.initialFilter ?? "");
   const q = useDebounce(filter.trim(), 250);
   const state = useRoutesBetween({ load: props.loadLinksBetween, a: between.a, b: between.b, families, q });
   const [prompting, setPrompting] = useState(false);

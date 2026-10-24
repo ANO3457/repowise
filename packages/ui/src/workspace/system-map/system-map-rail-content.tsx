@@ -28,6 +28,8 @@ export interface RailContentArgs {
   roleByNodeId?: ReadonlyMap<string, NodeArchitectureRole> | undefined;
   drawer?: SystemMapDrawerData | undefined;
   loadLinksBetween?: LoadLinksBetween | undefined;
+  /** The routes panel's starting filter (a route picked in search). */
+  routeFilter?: string | undefined;
   onSelect: (selection: SystemMapSelection) => void;
   onOpenGroup: (groupId: string) => void;
   /** Map verbs the rail offers. */
@@ -44,10 +46,14 @@ export interface RailVerbs {
 }
 
 /** The routes between the two services compared, when the level is Between and nothing is selected. */
-function levelRail({ graph, levelView, drawer, loadLinksBetween, verbs }: RailContentArgs): ReactNode {
+function levelRail({ graph, levelView, drawer, loadLinksBetween, routeFilter, verbs }: RailContentArgs): ReactNode {
   if (levelView.level !== "between" || !levelView.between) return null;
+  const { a, b } = levelView.between;
   return (
     <SystemMapRoutesPanel
+      // A new pair or a new route pick starts the panel over, with that filter.
+      key={`${a}|${b}|${routeFilter ?? ""}`}
+      initialFilter={routeFilter}
       graph={graph}
       between={levelView.between}
       families={levelView.families}
