@@ -85,10 +85,7 @@ class TestScanFile:
         ],
     )
     def test_pickle_round_trip_is_not_a_load(self, source: str, expected: bool) -> None:
-        assert (
-            bool([f for f in scan_source("a.py", source) if f["kind"] == "pickle_loads"])
-            is expected
-        )
+        assert bool([f for f in scan_source("a.py", source) if f["kind"] == "pickle_loads"]) is expected
 
     def test_line_patterns_fire_on_real_source(self) -> None:
         scanner = SecurityScanner(session=None, repo_id="r1")  # type: ignore[arg-type]
@@ -227,11 +224,7 @@ class TestScanFile:
             ('x = "a\\"b"  # c\ny', "x =            \ny", 'x = "a\\"b"     \ny'),
             ("a /* b\nc */ d", "a     \n     d", "a     \n     d"),
             ("s = '''q\n\"\"\" ''' + k", "s =     \n        + k", "s = '''q\n\"\"\" ''' + k"),
-            (
-                't = `a${f({b: "c"})}d` // e',
-                "t =     f({b:     )        ",
-                't = `a${f({b: "c"})}d`     ',
-            ),
+            ('t = `a${f({b: "c"})}d` // e', "t =     f({b:     )        ", 't = `a${f({b: "c"})}d`     '),
             ('open "abc\\', "open      ", 'open "abc\\'),
             ("u = '#' # z", "u =        ", "u = '#'    "),
         ],
@@ -358,10 +351,7 @@ class TestScanFile:
     @pytest.mark.parametrize(
         ("source", "expected_kind"),
         [
-            (
-                'AWS_ACCESS_KEY_ID = "AKIAQZXNRTVYWMPKLBHG"\n',
-                "aws_access_key",
-            ),  # pragma: allowlist secret
+            ('AWS_ACCESS_KEY_ID = "AKIAQZXNRTVYWMPKLBHG"\n', "aws_access_key"),  # pragma: allowlist secret
             (
                 'GITHUB_TOKEN = "ghp_abcdefghijklmnopqrstuvwxyzABCDEFGHIJ"\n',  # pragma: allowlist secret
                 "github_token",
@@ -376,10 +366,7 @@ class TestScanFile:
                 + '"\n',
                 "github_token",
             ),
-            (
-                'SLACK_BOT_TOKEN = "xoxb-4721609583-T5Rk9mPz2Qa"\n',
-                "slack_token",
-            ),  # pragma: allowlist secret
+            ('SLACK_BOT_TOKEN = "xoxb-4721609583-T5Rk9mPz2Qa"\n', "slack_token"),  # pragma: allowlist secret
             (
                 'GOOGLE_MAPS_API_KEY = "AIzaSyD9K2vQ7xR4mZ1pL8tY6wU3nB0cF5hD9aX"\n',  # pragma: allowlist secret
                 "google_api_key",
@@ -613,10 +600,7 @@ class TestScanFile:
             ("from requests import get\nget(url, verify=False)\n", True),
             ("import requests\ns = requests.Session()\ns.get(url, verify=False)\n", True),
             ("import requests as r\nwith r.Session() as s:\n    s.post(url, verify=False)\n", True),
-            (
-                "import requests\nclass C:\n    def go(self):\n        self.http.get(u, verify=False)\n",
-                True,
-            ),
+            ("import requests\nclass C:\n    def go(self):\n        self.http.get(u, verify=False)\n", True),
             ("import requests\ns = requests.Session()\ns.verify = False\n", True),
             ("import requests\nclass Backend:\n    verify = False\n", True),
             # A file with no HTTP client library: whatever ``get`` or ``client`` is, not TLS.
@@ -662,9 +646,7 @@ class TestScanFile:
             ("src = 'q = f\"SELECT * FROM t WHERE id = {uid}\"'\n", False),
         ],
     )
-    def test_fstring_sql_needs_a_value_written_into_a_query(
-        self, source: str, expected: bool
-    ) -> None:
+    def test_fstring_sql_needs_a_value_written_into_a_query(self, source: str, expected: bool) -> None:
         findings = scan_source("db.py", source)
         assert bool([f for f in findings if f["kind"] == "fstring_sql"]) is expected
 
@@ -674,10 +656,7 @@ class TestScanFile:
             ("<div dangerouslySetInnerHTML={{ __html: markup }} />", "unsafe_inner_html"),
             ("const q = `SELECT * FROM users WHERE id = ${id}`;", "template_literal_sql"),
             ("const f = new Function(body);", "new_function_call"),
-            (
-                "const a = new https.Agent({ rejectUnauthorized: false });",
-                "reject_unauthorized_false",
-            ),
+            ("const a = new https.Agent({ rejectUnauthorized: false });", "reject_unauthorized_false"),
             ("const k = process.env.NEXT_PUBLIC_API_KEY;", "public_env_secret"),
         ],
     )
@@ -705,29 +684,17 @@ class TestScanFile:
             ("a.py", "assert repo.head_commit == sha1\n", False),
             ("a.py", "#: A commit id (sha1 or sha256).\n", False),
             ("a.py", '"weak_hash": "The words md5 or sha1.",\n', False),
-            ("a.py", '_commit(repo, "h.py", "hashlib.md5(b\'\')")\n', False),
+            ("a.py", "_commit(repo, \"h.py\", \"hashlib.md5(b'')\")\n", False),
             # Declared a checksum, not a security control.
-            (
-                "a.py",
-                "key = hashlib.sha1(text.encode(), usedforsecurity=False).hexdigest()\n",
-                False,
-            ),
+            ("a.py", "key = hashlib.sha1(text.encode(), usedforsecurity=False).hexdigest()\n", False),
             ("a.py", "key = hashlib.sha1(\n    text.encode(), usedforsecurity=False\n)\n", False),
             ("a.py", 'key = hashlib.sha1(f"({a})".encode(), usedforsecurity=False)\n', False),
             ("a.py", 'key = hashlib.sha1(b"usedforsecurity=False")\n', True),
-            (
-                "a.py",
-                "key = hashlib.sha1(\n    text.encode()\n)\nok = sha256(b, usedforsecurity=False)\n",
-                True,
-            ),
+            ("a.py", "key = hashlib.sha1(\n    text.encode()\n)\nok = sha256(b, usedforsecurity=False)\n", True),
             # Cut to a few characters where it is computed, or kept as a key: an id.
             ("a.py", "short = hashlib.md5(name.encode()).hexdigest()[:8]\n", False),
             ("a.py", "short = hashlib.sha1(name.encode()).hexdigest()[0:12]\n", False),
-            (
-                "a.js",
-                'const id = crypto.createHash("md5").update(s).digest("hex").slice(0, 8);\n',
-                False,
-            ),
+            ("a.js", 'const id = crypto.createHash("md5").update(s).digest("hex").slice(0, 8);\n', False),
             ("a.py", "etag = hashlib.md5(body).hexdigest()\n", False),
             ("a.py", "cache_key = hashlib.sha1(url.encode()).hexdigest()\n", False),
             ("a.ts", 'const cacheKey = createHash("md5").update(url).digest("hex");\n', False),
@@ -741,11 +708,7 @@ class TestScanFile:
             ("a.py", "whole = hashlib.md5(data).hexdigest()[:32]\n", True),
             ("a.py", "mac = hmac.new(k, m, hashlib.md5).hexdigest()[:8]\n", True),
             ("a.py", "if cache_key in seen: h = hashlib.md5(data).hexdigest()\n", True),
-            (
-                "a.ts",
-                'const cacheKey: string = createHash("md5").update(url).digest("hex");\n',
-                False,
-            ),
+            ("a.ts", 'const cacheKey: string = createHash("md5").update(url).digest("hex");\n', False),
             ("a.py", 'row = {"etag": hashlib.md5(body).hexdigest()}\n', False),
             ("a.py", "author_slug = hashlib.md5(name.encode()).hexdigest()\n", False),
         ],
@@ -939,7 +902,9 @@ class TestSecretMasking:
             ),
         ],
     )
-    def test_credential_snippet_is_masked(self, source: str, kind: str, raw_val: str) -> None:
+    def test_credential_snippet_is_masked(
+        self, source: str, kind: str, raw_val: str
+    ) -> None:
         """The plaintext secret value must not appear in any snippet."""
         scanner = SecurityScanner(session=None, repo_id="r1")  # type: ignore[arg-type]
         findings = asyncio.run(scanner.scan_file("config.py", source, symbols=[]))
@@ -981,7 +946,9 @@ class TestSecretMasking:
         """Even when severity is downgraded (test-path), the snippet is masked."""
         source = "password = 'super_secret_real_password_99'\n"
         scanner = SecurityScanner(session=None, repo_id="r1")  # type: ignore[arg-type]
-        findings = asyncio.run(scanner.scan_file("tests/unit/test_auth.py", source, symbols=[]))
+        findings = asyncio.run(
+            scanner.scan_file("tests/unit/test_auth.py", source, symbols=[])
+        )
         hits = [f for f in findings if f["kind"] == "hardcoded_password"]
         assert hits, "finding must still fire on test path (just downgraded)"
         assert hits[0]["severity"] == "low"
@@ -1012,10 +979,7 @@ class TestScanSource:
     @pytest.mark.parametrize(
         ("source", "raw"),
         [
-            (
-                "NEXT_PUBLIC_STRIPE_SECRET_KEY=sk_live_0123456789abcdef\n",
-                "sk_live_0123456789abcdef",
-            ),  # pragma: allowlist secret
+            ("NEXT_PUBLIC_STRIPE_SECRET_KEY=sk_live_0123456789abcdef\n", "sk_live_0123456789abcdef"),  # pragma: allowlist secret
             ('  "VITE_API_KEY": "abcdef0123456789",\n', "abcdef0123456789"),
             ("export const NEXT_PUBLIC_AUTH_TOKEN = 'tok_9876543210';\n", "tok_9876543210"),
         ],
@@ -1044,11 +1008,7 @@ class TestScanSource:
         assert [f for f in scan_source(".env", source) if f["kind"] == "public_env_secret"] == []
 
     def test_public_env_secret_with_value_still_fires(self) -> None:
-        hits = [
-            f
-            for f in scan_source(".env", "VITE_API_TOKEN=abc123\n")
-            if f["kind"] == "public_env_secret"
-        ]
+        hits = [f for f in scan_source(".env", "VITE_API_TOKEN=abc123\n") if f["kind"] == "public_env_secret"]
         assert len(hits) == 1
         assert hits[0]["snippet"] == "VITE_API_TOKEN=abc1****"
 
@@ -1221,9 +1181,7 @@ class TestEverySnippetIsMasked:
 
     def test_stray_hit_on_a_pem_body_line_is_masked(self) -> None:
         # pragma: allowlist nextline secret
-        body = (
-            "MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgE+AKIAQ2Z7RT4WXY5BCDFG/AoIBAQC7VJTUt9Us8cKj"
-        )
+        body = "MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgE+AKIAQ2Z7RT4WXY5BCDFG/AoIBAQC7VJTUt9Us8cKj"
         source = f"-----BEGIN RSA PRIVATE KEY-----\n{body}\n-----END RSA PRIVATE KEY-----\n"
         (hit,) = [f for f in scan_source("id_rsa", source) if f["kind"] == "aws_access_key"]
         assert hit["line"] == 2
@@ -1261,14 +1219,7 @@ class TestVendorShapeEdges:
 
     @pytest.mark.parametrize(
         "value",
-        [
-            "COMFY_CLOUD_API_KEY",
-            "NO_REPLY",
-            "HEARTBEAT_OK",
-            "AWS_V2_API_KEY",
-            "TOKEN_123_KEY",
-            "_PRIVATE_KEY",
-        ],
+        ["COMFY_CLOUD_API_KEY", "NO_REPLY", "HEARTBEAT_OK", "AWS_V2_API_KEY", "TOKEN_123_KEY", "_PRIVATE_KEY"],
     )
     @pytest.mark.parametrize("path", ["config.py", "config.ts", ".env"])
     def test_uppercase_identifiers_are_not_secrets(self, value: str, path: str) -> None:
@@ -1300,9 +1251,7 @@ class TestVendorShapeEdges:
         assert "private_key_pem" in self._kinds(source, ".env")
 
     def test_google_key_ending_in_a_dash_is_flagged(self) -> None:
-        source = (
-            'MAPS_KEY = "AIzaSyD9K2vQ7xR4mZ1pL8tY6wU3nB0cF5hD9a-"\n'  # pragma: allowlist secret
-        )
+        source = 'MAPS_KEY = "AIzaSyD9K2vQ7xR4mZ1pL8tY6wU3nB0cF5hD9a-"\n'  # pragma: allowlist secret
         assert "google_api_key" in self._kinds(source)
 
     def test_google_shape_inside_an_integrity_hash_is_ignored(self) -> None:
@@ -1436,14 +1385,8 @@ class TestForgeSecretShapes:
     @pytest.mark.parametrize(
         ("source", "kind"),
         [
-            (
-                'password = "https://ci:Xk29fjQ81z@gitlab.com/o/r.git"\n',
-                "hardcoded_password",
-            ),  # pragma: allowlist secret
-            (
-                'API_KEY = "https://svc:Xk29fjQ81z@github.com/o/r"\n',
-                "hardcoded_secret",
-            ),  # pragma: allowlist secret
+            ('password = "https://ci:Xk29fjQ81z@gitlab.com/o/r.git"\n', "hardcoded_password"),  # pragma: allowlist secret
+            ('API_KEY = "https://svc:Xk29fjQ81z@github.com/o/r"\n', "hardcoded_secret"),  # pragma: allowlist secret
         ],
     )
     def test_keyword_named_url_credential_keeps_its_kind(self, source: str, kind: str) -> None:
@@ -1516,10 +1459,7 @@ class TestSecretPrecision:
             ("README.md", 'export OPENAI_API_KEY="your-key-here"\n'),
             ("README.md", 'API_KEY="sk-<your key>"\n'),
             ("README.md", 'SECRET="$(op read op://vault/app/secret)"\n'),
-            (
-                "deploy.sh",
-                'TOKEN="$(kubectl get secret app -o jsonpath=\x27{.data.t}\x27 | base64 -d)"\n',
-            ),
+            ("deploy.sh", 'TOKEN="$(kubectl get secret app -o jsonpath=\x27{.data.t}\x27 | base64 -d)"\n'),
             ("src/app.py", 'API_KEY = "prefix-${VAR}-suffix"\n'),
             ("src/app.py", 'TOKEN = "prefix-{{var}}-suffix"\n'),
             ("src/app.py", 'TOKEN = "xxxxxxxxxxxx"\n'),
@@ -1551,10 +1491,7 @@ class TestSecretPrecision:
         [
             ("src/Conn.kt", 'const val DISCOVERY_TOKEN = "discoveryToken"\n'),
             ("src/Conn.kt", 'const val KEY_STORE_PASSWORD = "keystorePassword"\n'),
-            (
-                "src/tokens.ts",
-                "export const LANGUAGE_SERVER_WS_ADDRESS_TOKEN = 'LANGUAGE_SERVER_WS_ADDRESS_TOKEN';\n",
-            ),
+            ("src/tokens.ts", "export const LANGUAGE_SERVER_WS_ADDRESS_TOKEN = 'LANGUAGE_SERVER_WS_ADDRESS_TOKEN';\n"),
             ("src/AuthScheme.kt", 'const val MASKED_PASSWORD = "**************"\n'),
             ("src/Auth.kt", 'val bearerToken = "Bearer ${auth.token.tokenValue}"\n'),
             ("src/auth.ts", 'const token = "Basic ${btoa(user)}";\n'),
@@ -1593,7 +1530,12 @@ class TestSecretPrecision:
         assert self._kinds(source) == {"hardcoded_secret"}
 
     def test_doctest_example_is_not_a_password(self) -> None:
-        source = 'def mask(line):\n    """\n    >>> mask("password = \'supersecret99\'")\n    """\n'
+        source = (
+            "def mask(line):\n"
+            '    """\n'
+            "    >>> mask(\"password = 'supersecret99'\")\n"
+            '    """\n'
+        )
         assert self._kinds(source) == set()
 
     def test_comment_naming_a_public_env_variable_is_not_a_leak(self) -> None:
@@ -1609,9 +1551,7 @@ class TestSecretPrecision:
         assert self._kinds(source) == {"hardcoded_password"}
 
     def test_vendor_key_in_a_comment_still_fires(self) -> None:
-        kinds = {
-            f["kind"] for f in scan_source("src/app.py", "# AKIAQZXNRTVYWMPKLBHG\n")
-        }  # pragma: allowlist secret
+        kinds = {f["kind"] for f in scan_source("src/app.py", "# AKIAQZXNRTVYWMPKLBHG\n")}  # pragma: allowlist secret
         assert kinds == {"aws_access_key"}
 
 
@@ -1811,7 +1751,7 @@ class TestNoAlarmOnCodeThatDoesNotShip:
     def test_csharp_interpolated_string_verbatim_and_escaped_braces(self) -> None:
         from repowise.core.analysis.security.masking import mask_comments_and_strings, mask_dialect
 
-        src = 'var u = $@"c:\\dir\\{sub}""name""";\nvar x = 1;\n'
+        src = 'var u = $@"c:\\dir\\{sub}\""name""";\nvar x = 1;\n'
         masked = mask_comments_and_strings(
             src, strings=True, hash_comments=False, **mask_dialect("a.cs")
         )
@@ -1822,7 +1762,6 @@ class TestNoAlarmOnCodeThatDoesNotShip:
             src_braces, strings=True, hash_comments=False, **mask_dialect("a.cs")
         )
         assert masked_braces == "var u = $                          hole  ;\n"
-
 
 @pytest.mark.parametrize("prefix", ["$@", "@$"])
 @pytest.mark.parametrize("strings", [False, True])
