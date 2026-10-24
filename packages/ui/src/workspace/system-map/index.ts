@@ -1,8 +1,10 @@
 /**
  * Live System Map public surface: the map, its lens control, drawer, lens
  * results and findings; the overlay builders for each lens; the AI prompt
- * builders and the pure model helpers behind them; layout, registries and
- * overlay types. The rail panels stay exported for hosts that still use them.
+ * builders and the pure model helpers behind them; the levels model (groups,
+ * bands, focus columns, paths between two services, draw budget); layout,
+ * registries and overlay types. The rail panels stay exported for hosts that
+ * still use them.
  */
 
 export {
@@ -12,6 +14,7 @@ export {
   type SystemMapProps,
 } from "./system-map";
 export { SystemMapLegend, type SystemMapLegendProps } from "./system-map-legend";
+export { SystemMapEvidenceNotice, type SystemMapEvidenceNoticeProps } from "./system-map-evidence-notice";
 export {
   SystemMapFilters,
   Segmented,
@@ -38,7 +41,6 @@ export {
   SYSTEM_MAP_PROMPT_MAX_ROWS,
 } from "./system-map-ai-prompt";
 export {
-  healthMark,
   serviceResolver,
   summarizeServiceContracts,
   serviceDiagnostics,
@@ -72,15 +74,16 @@ export {
   type RoleStyle,
 } from "./architecture";
 export { useSystemMapLayout, type SystemMapLayout, type UseSystemMapLayoutArgs } from "./use-system-map-layout";
+export { useLevelLayout, type LevelLayout, type UseLevelLayoutArgs } from "./use-level-layout";
+export { LEVEL_NODE_SIZES, CONTAINER_PADDING, type LevelNodeSizes } from "./layout-scopes";
+export type { SystemMapPhase } from "./use-system-map-phases";
 export {
   applyView,
   applyCollapse,
   computeSystemMapPositions,
   layoutSignature,
   SYSTEM_MAP_NODE_SIZE,
-  SYSTEM_MAP_MAX_LAYOUT_NODES,
   type SystemMapView,
-  type SystemMapPositions,
 } from "./layout";
 export {
   SystemMapRailPanel,
@@ -98,6 +101,74 @@ export {
   type SystemEdgeKindStyle,
   type EdgeCategory,
 } from "./edge-kinds";
+export {
+  buildLevelView,
+  normalizeGraph,
+  type LevelView,
+} from "./levels";
+export {
+  buildEstateView,
+  activeGroups,
+  linkedWeights,
+  groupNodeId,
+  OPEN_GROUP_LIMIT,
+  TRAY_NODE_ID,
+  ESTATE_MORE_ID,
+  type EstateView,
+} from "./estate-view";
+export {
+  focusColumns,
+  placeFocusColumns,
+  focusNodeId,
+  focusMoreId,
+  type FocusColumn,
+  type FocusConnector,
+  type FocusEntry,
+  type FocusLayout,
+  type FocusPlacement,
+} from "./focus-columns";
+export {
+  servicesBetween,
+  shortestPaths,
+  buildAdjacency,
+  type BetweenOptions,
+  type BetweenResult,
+  type PathHop,
+  type ServicePath,
+} from "./between";
+export { connectEdges, summarizeLinks, bandId, compareIds } from "./bands";
+export { DRAW_BUDGET, allocateSlots, capEdges, truncationReport, type BudgetContainer } from "./draw-budget";
+export {
+  EDGE_FAMILY_ORDER,
+  DEFAULT_EDGE_FAMILIES,
+  LINKED_FAMILIES,
+  edgeFamily,
+  edgeFamilyOf,
+  familyCounts,
+  linkWeight,
+  type EdgeFamily,
+  type FamilyCount,
+} from "./edge-families";
+export type {
+  DrawBudget,
+  DrawnBand,
+  DrawnEdge,
+  DrawnGroupNode,
+  DrawnMoreNode,
+  DrawnNode,
+  DrawnServiceNode,
+  DrawnSingleEdge,
+  DrawnTrayNode,
+  FocusColumnId,
+  LevelViewState,
+  LevelsEdge,
+  LevelsGraph,
+  LevelsGroupMeta,
+  LevelsNode,
+  LinkSummary,
+  MapLevel,
+  TruncationReport,
+} from "./level-types";
 export { SYSTEM_NODE_KINDS, NODE_KIND_ORDER, nodeKindStyle, type SystemNodeKindStyle } from "./node-kinds";
 export {
   resolveNodeOverlay,
