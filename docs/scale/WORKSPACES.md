@@ -172,7 +172,10 @@ Scans source files for HTTP routes, gRPC services, database tables, message topi
 
 Socket detection is toggled by `detect_socket` in the `contracts:` block below.
 A topic, queue or route name is resolved when it is a literal or a constant the
-same file assigns once; a name built at runtime is skipped, not guessed. HTTP
+same file assigns once; a name built at runtime is skipped, not guessed. RabbitMQ
+is also read from Go (streadway/amqp, amqp091-go), and a queue named through its
+declaration's result (`q.Name` after Go `QueueDeclare`, amqplib `assertQueue`, pika
+`queue_declare`) resolves when that file declares it with a settled name. HTTP
 routes match on their full path, with router mount prefixes stitched on first.
 An ambiguous target becomes a lower-confidence **candidate** link, and a unique
 one an **exact** link. The exact naming and matching rules for each transport
