@@ -8,10 +8,11 @@
  */
 
 import { bench, describe } from "vitest";
-import type { SystemEdgeKind } from "@repowise-dev/types";
-import { applyView, computeSystemMapPositions, layoutSignature } from "../../src/workspace/system-map/layout";
-import { collapseToRepos } from "../../src/workspace/system-map/collapse";
+import type { SystemEdge, SystemNode } from "@repowise-dev/types";
 import { buildLevelView } from "../../src/workspace/system-map/levels";
+import { computeLevelLayout, levelLayoutInput } from "../../src/workspace/system-map/level-layout";
+import { toFlowElements } from "../../src/workspace/system-map/flow-elements";
+import { scopeCaption } from "../../src/workspace/system-map/scope-caption";
 import {
   orderByPrevious,
   planLevelLayout,
@@ -25,10 +26,9 @@ import type { LevelsGraph } from "../../src/workspace/system-map/level-types";
 import { makeSyntheticSystemGraph } from "./fixtures/synthetic-system-graph";
 
 const SIZES = [30, 100, 300, 1000] as const;
-const RUNTIME_KINDS = new Set<SystemEdgeKind>(["http", "grpc", "socket", "event", "db"]);
 /** ELK runs for seconds at the top sizes; a few samples are enough there. */
 const SLOW = { iterations: 3, time: 0, warmupIterations: 1 } as const;
-/** ELK over the whole estate is skipped above this: the map only ever lays out drawn views (at most ~120 cards). */
+/** ELK rows stop here: past it a cold layout of the drawn estate takes minutes in Node without a worker. */
 const ELK_MAX_SERVICES = 300;
 
 for (const services of SIZES) {
@@ -53,19 +53,18 @@ for (const services of SIZES) {
   const previous = new Map(
     plan.root.nodes.map((n, i) => [n.id, { x: (i * 7919) % 2000, y: (i * 104729) % 1500 }] as const),
   );
+  // What the canvas draws first: the estate (L0), its layout and its React Flow elements.
+  const estate = buildLevelView(levels);
+  // A grid stands in for ELK's positions: toFlowElements reads them, it does not depend on their values.
+  const estatePositions = new Map(
+    estate.nodes.map((n, i) => [n.id, { x: (i % 12) * 260, y: Math.floor(i / 12) * 140, width: 240, height: 104 }] as const),
+  );
+  const nodesById = new Map<string, SystemNode>(graph.nodes.map((n) => [n.id, n]));
+  const edgesById = new Map<string, SystemEdge>(graph.edges.map((e) => [e.id, e]));
 
   describe(`system map, ${services} services / ${graph.edges.length} edges`, () => {
-    bench("applyView (runtime kinds)", () => {
-      applyView(graph, { visibleKinds: RUNTIME_KINDS, collapsed: false });
-    });
-    bench("collapseToRepos", () => {
-      collapseToRepos(graph);
-    });
-    bench("layoutSignature", () => {
-      layoutSignature(graph);
-    });
     bench("serviceResolver + neighbourGroups (hub, both ways)", () => {
-      serviceResolver(graph, false);
+      serviceResolver(graph);
       neighbourGroups(graph, hub, "in");
       neighbourGroups(graph, hub, "out");
     });
@@ -79,11 +78,6 @@ for (const services of SIZES) {
     bench("orderByPrevious (root scope)", () => {
       orderByPrevious(plan.root.nodes, previous);
     });
-    if (services <= ELK_MAX_SERVICES) {
-      bench("computeSystemMapPositions (ELK, whole estate)", async () => {
-        await computeSystemMapPositions(graph);
-      }, SLOW);
-    }
     bench("buildLevelView estate (cold payload, normalizes)", () => {
       buildLevelView({ ...levels });
     });
@@ -98,6 +92,20 @@ for (const services of SIZES) {
     });
     bench("servicesBetween (runtime pair)", () => {
       servicesBetween(levels, caller, callee);
+    });
+    if (services <= ELK_MAX_SERVICES) {
+      bench("L0 layout: computeLevelLayout estate (ELK over the drawn view, cold cache)", async () => {
+        await computeLevelLayout(levelLayoutInput(buildLevelView(levels), graph.edges), { worker: false });
+      }, SLOW);
+      bench("open group layout: computeLevelLayout with one group open (cold cache)", async () => {
+        await computeLevelLayout(levelLayoutInput(view, graph.edges), { worker: false });
+      }, SLOW);
+    }
+    bench("toFlowElements estate (cards, bands, health join)", () => {
+      toFlowElements({ view: estate, positions: estatePositions, nodesById, edgesById });
+    });
+    bench("scopeCaption estate", () => {
+      scopeCaption(estate, (id) => id);
     });
   });
 }

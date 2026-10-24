@@ -64,3 +64,47 @@ export function familyCounts(
 export function linkWeight(edge: { weight: number }): number {
   return edge.weight > 1 ? edge.weight : 1;
 }
+
+export interface FamilyTally {
+  family: EdgeFamily;
+  /** System edges of the family, the unit the chips and the caption count. */
+  edges: number;
+  /** Whether the family filter draws it. */
+  drawn: boolean;
+}
+
+/**
+ * Edges per present family in chip order, each marked drawn or hidden by
+ * `drawn`: what a host's lede and figures say about the map, from the same
+ * counts the chips and caption read.
+ */
+export function familyTally(
+  edges: Iterable<{ kind: string; family?: string | null | undefined; weight: number }>,
+  drawn: ReadonlySet<EdgeFamily>,
+): FamilyTally[] {
+  const counts = familyCounts(edges);
+  return EDGE_FAMILY_ORDER.flatMap((family) => {
+    const count = counts[family];
+    return count ? [{ family, edges: count.edges, drawn: drawn.has(family) }] : [];
+  });
+}
+
+/** How a family is named on its chip, in the caption and in the legend. */
+export const EDGE_FAMILY_COPY: Record<EdgeFamily, { label: string; meaning: string }> = {
+  runtime: { label: "Runtime", meaning: "calls and events" },
+  data: { label: "Data", meaning: "shared databases" },
+  build: { label: "Build", meaning: "package dependencies" },
+  history: { label: "History", meaning: "files changed together" },
+};
+
+/** Edges per kind inside each family, for a chip's hover ("HTTP 7, Event 9"). */
+export function kindCountsByFamily(
+  edges: Iterable<{ kind: string; family?: string | null | undefined }>,
+): Partial<Record<EdgeFamily, Record<string, number>>> {
+  const out: Partial<Record<EdgeFamily, Record<string, number>>> = {};
+  for (const e of edges) {
+    const row = (out[edgeFamilyOf(e)] ??= {});
+    row[e.kind] = (row[e.kind] ?? 0) + 1;
+  }
+  return out;
+}

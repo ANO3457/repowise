@@ -13,14 +13,16 @@
 
 import type { C4LayoutEdge, C4LayoutNode, C4LayoutPosition } from "../../c4/layout/elk-c4-layout";
 import { compareIds } from "./bands";
-import { edgeFamily } from "./edge-families";
-import { SYSTEM_MAP_NODE_SIZE } from "./layout";
+import { edgeFamilyOf, linkWeight } from "./edge-families";
 import type { DrawnNode, LevelsEdge } from "./level-types";
 
 interface Size {
   width: number;
   height: number;
 }
+
+/** A service card's footprint on the map. */
+export const SYSTEM_MAP_NODE_SIZE = { width: 208, height: 96 } as const;
 
 /** Card footprints per drawn node type. Open containers are sized from their interior. */
 export interface LevelNodeSizes {
@@ -47,7 +49,7 @@ export interface LayoutScope {
   id: string;
   /** In drawn order. In the root, an open container has a zero size until its interior is laid out. */
   nodes: C4LayoutNode[];
-  /** One per ordered pair of drawn ids, in id order. */
+  /** Placement edges: at most one per pair of drawn ids, the strongest kept, in id order. */
   edges: C4LayoutEdge[];
 }
 
@@ -67,7 +69,7 @@ function nodeSize(n: DrawnNode, sizes: LevelNodeSizes): Size {
 
 /** Every family but History shapes placement; co-change is undirected and would add layers. */
 function shapesLayout(e: LevelsEdge): boolean {
-  return e.source !== e.target && edgeFamily(e.kind) !== "history";
+  return e.source !== e.target && edgeFamilyOf(e) !== "history";
 }
 
 interface Placement {
@@ -109,9 +111,65 @@ function liftEdge(e: LevelsEdge, { parentOf, drawnAt }: Placement): [string, str
 }
 
 /**
+ * A scope's placement-edge budget per card, on average: the scope keeps at
+ * most this times its card count, and a hub card may hold more than its
+ * share. ELK's layered layout grows with edges far faster than with cards:
+ * a 30-card estate over a 3,000-edge graph lifts to about 750 card pairs,
+ * which took ELK about 50 s; capped at 60 edges it is well under 100 ms.
+ */
+export const PLACEMENT_EDGES_PER_CARD = 2;
+
+/**
+ * One edge per unordered card pair, pointing the way most links go (ties to
+ * the lower id first). Every card first keeps its strongest pair, so no
+ * linked card is left edgeless in layer 0 (a hub may take several of these);
+ * the rest of a budget of `perCard` times the card count goes to the strongest remaining pairs, ties by id.
+ * Layers follow the kept edges only, so a weak drawn connector may run
+ * against them. Deterministic and independent of input order.
+ */
+export function placementEdges(
+  weights: ReadonlyMap<string, { source: string; target: string; links: number }>,
+  cards: number,
+  perCard: number = PLACEMENT_EDGES_PER_CARD,
+): C4LayoutEdge[] {
+  const pairs = new Map<string, { source: string; target: string; links: number; net: number }>();
+  for (const w of weights.values()) {
+    const forward = compareIds(w.source, w.target) < 0;
+    const key = forward ? `${w.source}\u0000${w.target}` : `${w.target}\u0000${w.source}`;
+    let p = pairs.get(key);
+    if (!p) {
+      const [a, b] = forward ? [w.source, w.target] : [w.target, w.source];
+      pairs.set(key, (p = { source: a, target: b, links: 0, net: 0 }));
+    }
+    p.links += w.links;
+    p.net += forward ? w.links : -w.links;
+  }
+  const ranked = [...pairs.values()].map((p) => {
+    const [source, target] = p.net >= 0 ? [p.source, p.target] : [p.target, p.source];
+    return { id: `${source}>${target}`, source, target, links: p.links };
+  });
+  ranked.sort((x, y) => y.links - x.links || compareIds(x.id, y.id));
+  const kept = new Set<(typeof ranked)[number]>();
+  const linked = new Set<string>();
+  for (const r of ranked) {
+    if (linked.has(r.source) && linked.has(r.target)) continue;
+    kept.add(r);
+    linked.add(r.source).add(r.target);
+  }
+  const budget = Math.ceil(cards * perCard);
+  for (const r of ranked) {
+    if (kept.size >= budget) break;
+    kept.add(r);
+  }
+  return [...kept].map(({ id, source, target }) => ({ id, source, target })).sort((x, y) => compareIds(x.id, y.id));
+}
+
+type PairWeights = Map<string, { source: string; target: string; links: number }>;
+
+/**
  * Scopes for an estate, group or between view (focus uses fixed columns).
  * `edges` are the graph's system edges, each lifted to the drawn ids that
- * show its ends.
+ * show its ends and summed per card pair (see `placementEdges`).
  */
 export function planLevelLayout(
   nodes: readonly DrawnNode[],
@@ -119,10 +177,10 @@ export function planLevelLayout(
   sizes: LevelNodeSizes = LEVEL_NODE_SIZES,
 ): LevelLayoutPlan {
   const placed = placement(nodes);
-  const scopes = new Map<string, { nodes: C4LayoutNode[]; edges: Map<string, C4LayoutEdge> }>();
+  const scopes = new Map<string, { nodes: C4LayoutNode[]; weights: PairWeights }>();
   const scope = (id: string) => {
     let s = scopes.get(id);
-    if (!s) scopes.set(id, (s = { nodes: [], edges: new Map() }));
+    if (!s) scopes.set(id, (s = { nodes: [], weights: new Map() }));
     return s;
   };
   scope(ROOT_SCOPE);
@@ -133,13 +191,16 @@ export function planLevelLayout(
     const lifted = shapesLayout(e) ? liftEdge(e, placed) : null;
     if (!lifted) continue;
     const [scopeId, source, target] = lifted;
+    const weights = scope(scopeId).weights;
     const id = `${source}>${target}`;
-    scope(scopeId).edges.set(id, { id, source, target });
+    const w = weights.get(id);
+    if (w) w.links += linkWeight(e);
+    else weights.set(id, { source, target, links: linkWeight(e) });
   }
 
   const toScope = (id: string): LayoutScope => {
     const s = scopes.get(id)!;
-    return { id, nodes: s.nodes, edges: [...s.edges.values()].sort((a, b) => compareIds(a.id, b.id)) };
+    return { id, nodes: s.nodes, edges: placementEdges(s.weights, s.nodes.length) };
   };
   const interiors = [...scopes.keys()].filter((id) => id !== ROOT_SCOPE && scopes.get(id)!.nodes.length > 0);
   return { interiors: interiors.map(toScope), root: toScope(ROOT_SCOPE) };

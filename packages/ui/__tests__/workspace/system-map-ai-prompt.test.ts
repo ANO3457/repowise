@@ -8,7 +8,6 @@ import {
   buildServiceAiPrompt,
 } from "../../src/workspace/system-map/system-map-ai-prompt";
 import {
-  edgeLinks,
   edgeSentence,
   serviceDiagnostics,
   serviceResolver,
@@ -92,11 +91,10 @@ const graph: SystemGraph = {
 };
 
 describe("system map model", () => {
-  it("puts a file in its deepest service, else the repo root, and in its repo when collapsed", () => {
-    const resolve = serviceResolver(graph, false);
+  it("puts a file in its deepest service, else the repo root", () => {
+    const resolve = serviceResolver(graph);
     expect(resolve("mono", "packages/web/src/x.ts")).toBe("mono::packages/web");
     expect(resolve("mono", "packages/website/x.ts")).toBe("mono");
-    expect(serviceResolver(graph, true)("mono", "packages/web/x.ts")).toBe("mono");
   });
 
   it("counts a service's contracts by role and type, most linked first", () => {
@@ -112,7 +110,7 @@ describe("system map model", () => {
         total: 4,
       },
       "mono::packages/web",
-      serviceResolver(graph, false),
+      serviceResolver(graph),
     );
     expect(summary.consumes).toEqual({ http: 2 });
     expect(summary.provides).toEqual({ code: 1 });
@@ -120,24 +118,13 @@ describe("system map model", () => {
   });
 
   it("attributes unmatched consumers and unused providers to the owning service", () => {
-    const resolve = serviceResolver(graph, false);
+    const resolve = serviceResolver(graph);
     expect(serviceDiagnostics(graph.diagnostics, "mono::packages/web", resolve)).toEqual({
       unmatched: 1,
       unmatchedByReason: { no_provider: 1 },
       unusedProviders: 0,
     });
     expect(serviceDiagnostics(graph.diagnostics, "api", resolve).unusedProviders).toBe(1);
-  });
-
-  it("joins an edge to the links it aggregates, consumer to provider", () => {
-    const e = graph.edges[0]!;
-    const links = edgeLinks(
-      e,
-      [link({}), link({ consumer_file: "server/r.py" }), link({ contract_type: "code" }), link({})],
-      serviceResolver(graph, false),
-    );
-    // Wrong service, wrong type and a duplicate are all dropped.
-    expect(links).toHaveLength(1);
   });
 
   it("names the weight's unit and says the relationship as a sentence", () => {

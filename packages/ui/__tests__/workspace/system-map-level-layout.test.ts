@@ -8,10 +8,13 @@ import {
   LEVEL_NODE_SIZES,
   ROOT_SCOPE,
   fitContainer,
+  PLACEMENT_EDGES_PER_CARD,
   orderByPrevious,
+  placementEdges,
   planLevelLayout,
   planSignature,
 } from "../../src/workspace/system-map/layout-scopes";
+import { makeSyntheticSystemGraph } from "./fixtures/synthetic-system-graph";
 import {
   computeLevelLayout,
   createLayoutCache,
@@ -101,6 +104,46 @@ describe("planLevelLayout", () => {
       `${groupNodeId("g0")}>${groupNodeId("g1")}`,
       `${groupNodeId("g1")}>${groupNodeId("g2")}`,
     ]);
+  });
+});
+
+describe("placementEdges", () => {
+  const w = (source: string, target: string, links: number) => [`${source}>${target}`, { source, target, links }] as const;
+
+  it("keeps one edge per card pair, pointing the way most links go", () => {
+    const edges = placementEdges(new Map([w("a", "b", 2), w("b", "a", 5), w("a", "c", 1)]), 3);
+    expect(edges.map((e) => e.id)).toEqual(["a>c", "b>a"]);
+  });
+
+  it("keeps the strongest pairs, two per card, whatever order the weights came in", () => {
+    const pairs = [w("a", "b", 9), w("c", "d", 1), w("a", "c", 4), w("b", "d", 4), w("a", "d", 2)];
+    const forward = placementEdges(new Map(pairs), 2);
+    expect(forward.map((e) => e.id)).toEqual(["a>b", "a>c", "a>d", "b>d"]);
+    expect(placementEdges(new Map([...pairs].reverse()), 2)).toEqual(forward);
+  });
+
+  it("never leaves a linked card edgeless, however strong a hub's other pairs are", () => {
+    const hub = ["x", "y", "z", "w"].flatMap((o) => [w("hub", o, 50), w(o, "hub", 40)]);
+    const leaves = [w("leaf1", "leaf2", 1), w("leaf3", "x", 1)];
+    const edges = placementEdges(new Map([...hub, ...leaves]), 2, 1);
+    const ends = new Set(edges.flatMap((e) => [e.source, e.target]));
+    for (const id of ["hub", "x", "y", "z", "w", "leaf1", "leaf2", "leaf3"]) expect(ends.has(id), id).toBe(true);
+  });
+
+  it("points a pair with equal links both ways from the lower id", () => {
+    expect(placementEdges(new Map([w("b", "a", 3), w("a", "b", 3)]), 2).map((e) => e.id)).toEqual(["a>b"]);
+  });
+
+  it("caps a dense 300-service estate at two placement edges per card", () => {
+    const g = makeSyntheticSystemGraph({ services: 300, edges: 3000, groups: 30, seed: 300 });
+    const groups = [...new Set(g.nodes.map((n) => n.group!))].map((id) => ({ id }));
+    const view = buildLevelView({ ...g, groups });
+    const plan = planLevelLayout(view.nodes, g.edges);
+    expect(plan.root.nodes).toHaveLength(30);
+    expect(plan.root.edges.length).toBeLessThanOrEqual(30 * PLACEMENT_EDGES_PER_CARD);
+    // One per pair: never both directions between two cards.
+    const pairs = new Set(plan.root.edges.map((e) => [e.source, e.target].sort().join("|")));
+    expect(pairs.size).toBe(plan.root.edges.length);
   });
 });
 

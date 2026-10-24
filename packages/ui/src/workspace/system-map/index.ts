@@ -7,12 +7,88 @@
  * still use them.
  */
 
+export { SystemMap, SYSTEM_MAP_CANVAS_HEIGHT, type SystemMapProps } from "./system-map";
+export { SystemMapCanvas, SYSTEM_MAP_MINIMAP_MIN_NODES, type SystemMapCanvasProps } from "./system-map-canvas";
+export { SystemMapGroupNode } from "./system-map-group-node";
+export { SystemMapTrayNode, SystemMapMoreNode } from "./system-map-tray-node";
+export { SystemMapBand, BAND_STROKE, bandWidth } from "./system-map-band";
+export { SystemMapLensBadge } from "./system-map-lens-badge";
+export { SystemMapBreadcrumb, breadcrumbTrail, type SystemMapBreadcrumbProps } from "./system-map-breadcrumb";
+export { GroupPanel, BandPanel, bandPairs } from "./system-map-aggregate-panel";
+export { SystemMapActionsContext, useSystemMapActions, type SystemMapActions } from "./system-map-actions";
+export { useSystemMapState, type SystemMapState, type SystemMapStateArgs } from "./use-system-map-state";
 export {
-  SystemMap,
-  SYSTEM_MAP_CANVAS_HEIGHT,
-  SYSTEM_MAP_MINIMAP_MIN_NODES,
-  type SystemMapProps,
-} from "./system-map";
+  ESTATE_VIEW,
+  MAP_VIEW_PARAMS,
+  TRAY_OPEN_TOKEN,
+  parseMapView,
+  writeMapView,
+  drawnFamilies,
+  toLevelViewState,
+  openContainer,
+  closeContainer,
+  toggleFamily,
+  showFamily,
+  backOut,
+  toEstate,
+  sameMapView,
+  focusService,
+  compareServices,
+  withDisplay,
+  type MapViewState,
+  type MapDisplay,
+} from "./view-state";
+export { SystemMapSearch, type SystemMapSearchProps } from "./system-map-search";
+export { useSystemMapSearch, type MapSearch } from "./use-system-map-search";
+export {
+  buildSearchIndex,
+  searchMap,
+  routeHits,
+  pickToView,
+  SEARCH_LIMIT,
+  SEARCH_MIN_CHARS,
+  type SearchHit,
+  type MapSearchIndex,
+  type SystemMapRouteLink,
+  type SystemMapRouteLoader,
+} from "./search-index";
+export { shortcutFor, shortcutHelpRows, type MapShortcut, type ShortcutKey } from "./shortcuts";
+export { useMapNavigation, type MapNavigation } from "./use-map-navigation";
+export { SystemMapList, type SystemMapListProps } from "./system-map-list";
+export {
+  serviceRows,
+  sortServiceRows,
+  nextSort,
+  DEFAULT_SERVICE_SORT,
+  type ServiceRow,
+  type ServiceSort,
+  type ServiceSortKey,
+} from "./service-rows";
+export { SystemMapHealthMark } from "./system-map-health-mark";
+export { levelAnnouncement, type AnnounceArgs } from "./announce";
+export { DEFAULT_NAV_COPY, navCopyWith, type SystemMapNavCopy } from "./nav-copy";
+export { resolveSelection, type ResolvedSelection } from "./selection-fix";
+export { scopeCaption, hiddenFamiliesSentence, truncationSentence } from "./scope-caption";
+export {
+  toFlowElements,
+  drawnLabel,
+  type FlowInputs,
+  type FlowElements,
+  type GroupNodeData,
+  type TrayNodeData,
+  type MoreNodeData,
+  type BandEdgeData,
+} from "./flow-elements";
+export {
+  groupSourceLabel,
+  healthCounts,
+  healthExceptions,
+  healthSummaryText,
+  kindMixText,
+  bandSentence,
+  type HealthCounts,
+  type HealthException,
+} from "./aggregate-facts";
 export { SystemMapLegend, type SystemMapLegendProps } from "./system-map-legend";
 export { SystemMapEvidenceNotice, type SystemMapEvidenceNoticeProps } from "./system-map-evidence-notice";
 export {
@@ -24,6 +100,8 @@ export {
 export { SystemMapLensControl, type SystemMapLens, type SystemMapLensControlProps } from "./system-map-lens";
 export {
   SystemMapDrawer,
+  SystemMapRailFrame,
+  drawerHasSubject,
   selectionRepo,
   cyclePrompt,
   type ContractRef,
@@ -44,13 +122,11 @@ export {
   serviceResolver,
   summarizeServiceContracts,
   serviceDiagnostics,
-  edgeLinks,
   edgeSentence,
   weightLabel,
   weightShort,
   plural,
   unmatchedReasonList,
-  resolveViewSelection,
   type SystemMapContract,
   type SystemMapRepoContracts,
 } from "./system-map-model";
@@ -73,25 +149,15 @@ export {
   ROLE_ORDER,
   type RoleStyle,
 } from "./architecture";
-export { useSystemMapLayout, type SystemMapLayout, type UseSystemMapLayoutArgs } from "./use-system-map-layout";
 export { useLevelLayout, type LevelLayout, type UseLevelLayoutArgs } from "./use-level-layout";
-export { LEVEL_NODE_SIZES, CONTAINER_PADDING, type LevelNodeSizes } from "./layout-scopes";
+export { LEVEL_NODE_SIZES, CONTAINER_PADDING, SYSTEM_MAP_NODE_SIZE, type LevelNodeSizes } from "./layout-scopes";
 export type { SystemMapPhase } from "./use-system-map-phases";
-export {
-  applyView,
-  applyCollapse,
-  computeSystemMapPositions,
-  layoutSignature,
-  SYSTEM_MAP_NODE_SIZE,
-  type SystemMapView,
-} from "./layout";
 export {
   SystemMapRailPanel,
   RailChip,
   RailEyebrow,
   type SystemMapRailPanelProps,
 } from "./system-map-rail";
-export { collapseToRepos } from "./collapse";
 export {
   SYSTEM_EDGE_KINDS,
   EDGE_KIND_ORDER,
@@ -136,18 +202,38 @@ export {
   type PathHop,
   type ServicePath,
 } from "./between";
+export { matchServices, pickerPath, resolveService } from "./between-picker";
+export { focusColumnLabels, FOCUS_COLUMN_TITLES, type FocusColumnLabel } from "./focus-labels";
+export {
+  ROUTES_PAGE,
+  planRoutes,
+  routesLede,
+  hiddenRoutesSentence,
+  type LinksBetweenOptions,
+  type LoadLinksBetween,
+  type RoutesPlan,
+} from "./routes-between";
+export { SystemMapRoutesPanel, type SystemMapRoutesPanelProps } from "./system-map-routes-panel";
+export { SystemMapBetweenControl, type SystemMapBetweenControlProps } from "./system-map-between-control";
+export { RouteRow } from "./system-map-route-row";
+export { buildPairAiPrompt, type BuildPairPromptOptions } from "./system-map-pair-prompt";
+export { useRoutesBetween, useEdgeRoutes, type RoutesBetweenState, type EdgeRoutes } from "./use-routes-between";
 export { connectEdges, summarizeLinks, bandId, compareIds } from "./bands";
 export { DRAW_BUDGET, allocateSlots, capEdges, truncationReport, type BudgetContainer } from "./draw-budget";
 export {
   EDGE_FAMILY_ORDER,
+  EDGE_FAMILY_COPY,
+  kindCountsByFamily,
   DEFAULT_EDGE_FAMILIES,
   LINKED_FAMILIES,
   edgeFamily,
   edgeFamilyOf,
   familyCounts,
+  familyTally,
   linkWeight,
   type EdgeFamily,
   type FamilyCount,
+  type FamilyTally,
 } from "./edge-families";
 export type {
   DrawBudget,
