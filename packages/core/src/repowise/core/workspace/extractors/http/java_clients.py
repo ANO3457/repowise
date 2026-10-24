@@ -13,6 +13,12 @@ Three call shapes, each with its own source for the verb:
   the verb in the callee, ``exchange(uri, HttpMethod.GET, ...)`` names it in the
   second argument.
 
+Spring's declarative clients, Java or Kotlin, are read by their own dialect:
+an ``@FeignClient`` interface written with the controller annotations, and a
+Spring 6 ``@HttpExchange`` interface. Both are parsed by the Spring provider
+reader in ``ingestion.framework_routes``, so a client and the controller it
+calls read one grammar.
+
 A chain with no terminal verb is refused rather than defaulted to GET, and a URL
 that is a bare variable is refused unless the file assigns it a string literal
 exactly once. OkHttp is left out: the corpus builds its ``Request.Builder`` from
@@ -22,14 +28,24 @@ a URL validated upstream, so no site carries a path this layer could read.
 from __future__ import annotations
 
 import re
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from typing import TYPE_CHECKING
 
+from repowise.core.ingestion.framework_routes import (
+    SPRING_EXCHANGE,
+    RouteMatch,
+    micronaut_annotations,
+    spring_class_paths,
+    spring_feign_clients,
+    spring_route_prefixes,
+    spring_routes,
+)
 from repowise.core.workspace.origins import ContractOrigin
 
-from ..langs import JAVA
+from ..langs import JAVA, KOTLIN
 from ..strings import JAVA_SYNTAX, call_arguments, match_paren, string_constants
 from .client_calls import VERBS, ClientCallMatch, consumer_contracts, method_from_argument
+from .mounts import compose_prefix
 
 if TYPE_CHECKING:
     from repowise.core.workspace.contracts import Contract
@@ -178,3 +194,188 @@ class JavaClientsDialect:
             *consumer_contracts(ctx, named, JAVA_SYNTAX, constants=constants),
             *consumer_contracts(ctx, ambiguous, JAVA_SYNTAX, constants=constants, path_only=True),
         ]
+
+
+# A literal argument of a Spring annotation: `key = "value"`, or the positional
+# first argument, which is `value`.
+_ANNOTATION_STRING_RE = re.compile(
+    r'(?:,\s*(?P<key>\w+)\s*=\s*|\(\s*(?:(?P<first>\w+)\s*=\s*)?)"(?P<value>[^"\\\n]*)"\s*(?=[,)])'
+)
+
+# A controller in the same file: `@HttpExchange` there declares a route served.
+# The guard is per file; a shared interface a controller elsewhere implements
+# still reads as a client.
+_CONTROLLER_RE = re.compile(r"@(?:Rest)?Controller\b")
+
+# A host the service-name map can look up: a bare service id, no placeholder.
+_SERVICE_ID_RE = re.compile(r"[\w.-]+")
+
+
+def _top_level(args: str) -> str:
+    """*args* with every nested ``(...)``, ``{...}`` and ``[...]`` blanked, offsets kept.
+
+    A nested annotation's ``path`` or ``url`` (``configuration = @Cfg(path = ...)``)
+    is not the client's.
+    """
+    out = list(args)
+    depth = 0
+    quoted = False
+    for i, ch in enumerate(args):
+        if ch == '"' and (i == 0 or args[i - 1] != "\\"):
+            quoted = not quoted
+        elif not quoted and ch in "([{":
+            depth += 1
+        elif not quoted and ch in ")]}":
+            depth -= 1
+            if depth >= 1:
+                out[i] = " "
+            continue
+        if depth > 1:
+            out[i] = " "
+    return "".join(out)
+
+
+def _annotation_strings(args: str) -> dict[str, str]:
+    """The literal arguments of an annotation's *args*, by key."""
+    out: dict[str, str] = {}
+    for m in _ANNOTATION_STRING_RE.finditer(args):
+        out.setdefault(m.group("key") or m.group("first") or "value", m.group("value"))
+    return out
+
+
+def _names_key(args: str, key: str) -> bool:
+    """Whether *args* passes *key* at all, literal or not."""
+    return re.search(rf"[(,]\s*{key}\s*=", args) is not None
+
+
+def _feign_base(args: str) -> tuple[str, str] | None:
+    """``(base URL, path prefix)`` a ``@FeignClient`` declares, ``None`` when unreadable.
+
+    ``url`` is where the client sends, literal or a ``${property}`` placeholder
+    the base resolver reads like any other. With no ``url`` the client calls
+    the service its ``name`` (or ``value``) registers under, which becomes the
+    host so the service-name map can place it; a placeholder name, or a ``url``
+    held in a constant, leaves the call a bare path. A ``path`` this cannot
+    read leaves every route under the client unknown.
+    """
+    args = _top_level(args)
+    strings = _annotation_strings(args)
+    prefix = strings.get("path", "")
+    if "${" in prefix or ("path" not in strings and _names_key(args, "path")):
+        return None
+    return _feign_host(args, strings), prefix
+
+
+def _feign_host(args: str, strings: dict[str, str]) -> str:
+    """The base URL a Feign client sends to: its ``url``, else its service name, else ``""``."""
+    if "url" in strings:
+        return strings["url"].rstrip("/")
+    name = strings.get("name") or strings.get("value") or ""
+    if _names_key(args, "url") or not _SERVICE_ID_RE.fullmatch(name):
+        return ""
+    return f"http://{name.lower()}"
+
+
+def _composed_paths(
+    class_paths: list[tuple[int, int, tuple[str, ...] | None]], route: RouteMatch, prefix: str
+) -> Iterator[str]:
+    """Each concrete path *route* reaches under its type prefixes and the client *prefix*."""
+    for type_prefix in spring_route_prefixes(class_paths, route.offset) or ():
+        path = compose_prefix(prefix, compose_prefix(type_prefix, route.path or ""))
+        if path.strip("/"):
+            yield path
+
+
+def _interface_rows(
+    routes: Iterator[RouteMatch],
+    class_paths: list[tuple[int, int, tuple[str, ...] | None]],
+    base_at: Callable[[int], tuple[str, str] | None],
+    *,
+    client: str,
+    unrestricted: str | None,
+) -> Iterator[ClientCallMatch]:
+    """Rows for a client interface's *routes*, each composed onto its type prefix and base.
+
+    *base_at* gives the ``(base URL, path prefix)`` of the client around an
+    offset. *unrestricted* is the verb the client sends for a mapping that
+    names none; ``None`` refuses such a mapping.
+    """
+    for route in routes:
+        base = None if route.path is None else base_at(route.offset)
+        verb = unrestricted if route.verb == "ALL" else route.verb
+        if base is None or verb is None or verb.lower() not in VERBS:
+            continue
+        url_base, prefix = base
+        for path in _composed_paths(class_paths, route, prefix):
+            yield ClientCallMatch(
+                client=client,
+                # The resolver reads a literal, so hand it one.
+                url=f'"{url_base}/{path.lstrip("/")}"',
+                offset=route.offset,
+                method=verb,
+                origin=ContractOrigin.CLIENT_CALL,
+            )
+
+
+def feign_interface_calls(content: str, annotations: set[int]) -> Iterator[ClientCallMatch]:
+    """Calls an ``@FeignClient`` interface declares with Spring MVC annotations."""
+    clients = spring_feign_clients(content, annotations)
+    if not clients:
+        return
+
+    def base_at(offset: int) -> tuple[str, str] | None:
+        inner = [args for start, end, args in clients if start < offset < end]
+        return _feign_base(inner[-1]) if inner else None
+
+    yield from _interface_rows(
+        spring_routes(content, annotations, feign=True),
+        spring_class_paths(content, annotations),
+        base_at,
+        client="feign",
+        unrestricted="GET",  # Feign sends a mapping that names no verb as a GET
+    )
+
+
+def http_exchange_calls(content: str, annotations: set[int]) -> Iterator[ClientCallMatch]:
+    """Calls a Spring 6 ``@HttpExchange`` interface declares.
+
+    The base URL is set where the proxy is built, out of this file's sight, so
+    each row is a path. A file holding a controller is skipped: there the same
+    annotations declare routes served, not calls.
+    """
+    if _CONTROLLER_RE.search(content):
+        return
+    yield from _interface_rows(
+        spring_routes(content, annotations, SPRING_EXCHANGE),
+        spring_class_paths(content, annotations, SPRING_EXCHANGE),
+        lambda _offset: ("", ""),
+        client="http-exchange",
+        unrestricted=None,
+    )
+
+
+class SpringClientsDialect:
+    name = "spring-clients"
+    extensions = JAVA | KOTLIN
+    requires = (
+        "@FeignClient",
+        "@HttpExchange",
+        "@GetExchange",
+        "@PostExchange",
+        "@PutExchange",
+        "@DeleteExchange",
+        "@PatchExchange",
+    )
+
+    def extract(self, ctx: ScanContext) -> list[Contract]:
+        content = ctx.content
+        annotations = micronaut_annotations(content)
+        rows = [
+            *feign_interface_calls(content, annotations),
+            *http_exchange_calls(content, annotations),
+        ]
+        if not rows:
+            return []
+        # The URL text is built here, not read from the file, so it resolves as
+        # a plain literal whatever the file's language.
+        return consumer_contracts(ctx, rows, JAVA_SYNTAX)
