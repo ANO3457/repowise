@@ -191,9 +191,7 @@ def _infer_tags(text: str) -> list[str]:
     ]
 
 
-def _snippet_for(
-    decision: ExtractedDecision, batch: Sequence[tuple[str, str]]
-) -> tuple[str, str]:
+def _snippet_for(decision: ExtractedDecision, batch: Sequence[tuple[str, str]]) -> tuple[str, str]:
     """The ``(file, prose)`` a comment decision came from, by file stem in its text.
 
     Best effort: the batch's first snippet when no stem matches.
@@ -262,7 +260,7 @@ class DecisionExtractor:
         # Ingestion's {rel_path: bytes} for the indexed set. When given, the
         # marker scan reads it instead of walking and re-reading the tree.
         self._source_map = source_map
-        self._existing_pr_shas = set(existing_pr_shas or ())
+        self._existing_pr_shas = set(existing_pr_shas) if existing_pr_shas is not None else None
 
     def _llm(self, source: str) -> Any | None:
         """The provider *source* may use, or None when its model stage is off.
@@ -574,6 +572,15 @@ class DecisionExtractor:
         ranked, files_by_sha = self._pr_body_candidates()
         if not ranked:
             return []
+        if self._existing_pr_shas is None:
+            from repowise.core.persistence import load_mined_pr_shas
+
+            # Every production entry point uses this miner. Resolve persisted
+            # provenance here instead of relying on an optional caller argument.
+            self._existing_pr_shas = await load_mined_pr_shas(self._repo_path)
+            ranked, files_by_sha = self._pr_body_candidates()
+            if not ranked:
+                return []
         forge = get_forge(detect_forge(self._repo_path))
 
         async def _process_batch(batch: list[dict]) -> list[ExtractedDecision]:
@@ -669,10 +676,11 @@ class DecisionExtractor:
         return snippets
 
     def planned_model_calls(self, sources: Collection[str]) -> int:
-        """Model calls the named model-only sources would make; calls none.
+        """Upper bound on named model-only calls; makes no model or store calls.
 
-        Reads the same candidates the miners send, so the estimate and the run
-        cannot drift apart.
+        PR candidates narrow further on the first async mining call when no
+        existing-PR set was supplied: that call loads the store's provenance.
+        Once loaded, planning uses the same narrowed candidate set.
         """
         planned = {
             "git_archaeology": lambda: (len(self._git_archaeology_candidates()[0]), _GIT_BATCH),
@@ -696,9 +704,7 @@ class DecisionExtractor:
 
         if self._graph is None:
             return []
-        return scan_conventions(
-            self._graph, self._parsed_files, self._source_map, self._repo_path
-        )
+        return scan_conventions(self._graph, self._parsed_files, self._source_map, self._repo_path)
 
     def _top_central_files(self, n: int) -> list[str]:
         """Top-*n* file nodes by centrality (existing on disk).
@@ -719,6 +725,7 @@ class DecisionExtractor:
             if p.is_file() and p.suffix.lower() not in _BINARY_EXTENSIONS:
                 out.append(node)
         return out
+
     # ------------------------------------------------------------------
     # Anti-hallucination substring gate
     # ------------------------------------------------------------------

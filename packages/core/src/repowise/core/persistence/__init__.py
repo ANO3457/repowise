@@ -29,6 +29,7 @@ from repowise.core.providers.embedding.base import Embedder, MockEmbedder
 
 #: Submodule -> the names it exports lazily from this package.
 _LAZY_BY_MODULE = {
+    "pr_history": ("load_mined_pr_shas",),
     "crud": (
         "batch_upsert_graph_edges",
         "batch_upsert_graph_metrics",
