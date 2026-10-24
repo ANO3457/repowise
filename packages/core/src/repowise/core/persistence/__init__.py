@@ -315,6 +315,7 @@ __all__ = [
     "list_external_systems",
     "list_page_ids",
     "list_pages",
+    "load_mined_pr_shas",
     "load_prior_pages",
     "load_stale_structural_file_paths",
     "load_stale_update_targets",
