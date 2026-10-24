@@ -74,6 +74,8 @@ export {
   type RoleStyle,
 } from "./architecture";
 export { useSystemMapLayout, type SystemMapLayout, type UseSystemMapLayoutArgs } from "./use-system-map-layout";
+export { useLevelLayout, type LevelLayout, type UseLevelLayoutArgs } from "./use-level-layout";
+export { LEVEL_NODE_SIZES, CONTAINER_PADDING, type LevelNodeSizes } from "./layout-scopes";
 export type { SystemMapPhase } from "./use-system-map-phases";
 export {
   applyView,
@@ -81,9 +83,7 @@ export {
   computeSystemMapPositions,
   layoutSignature,
   SYSTEM_MAP_NODE_SIZE,
-  SYSTEM_MAP_MAX_LAYOUT_NODES,
   type SystemMapView,
-  type SystemMapPositions,
 } from "./layout";
 export {
   SystemMapRailPanel,
