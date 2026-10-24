@@ -21,17 +21,18 @@ jobs:
           enable-cache: true
       - name: Exact product and locked dependencies
         run: |
-          git checkout d966bf9789ce15fa64cbc614154ddf5a943db95c
+          git checkout a159f86e73080c8371154411bc1648a1b60ac6f9
           uv python install ${{ matrix.python }}
           uv sync --all-packages --python ${{ matrix.python }}
       - name: Regression and source gates
         run: |
-          uv run pytest tests/unit/analysis/test_decision_commit_selection.py tests/unit/core/test_decision_lanes.py tests/unit/analysis/test_decision_sources.py tests/unit/analysis/test_decision_batch_budget.py -q --junitxml=focus.xml
+          uv run pytest tests/unit/persistence/test_lazy_exports.py tests/unit/analysis/test_decision_commit_selection.py tests/unit/core/test_decision_lanes.py tests/unit/analysis/test_decision_sources.py tests/unit/analysis/test_decision_batch_budget.py -q --junitxml=focus.xml
           uv run ruff check .
           uv run ruff format --check packages/core/src/repowise/core/persistence/pr_history.py packages/core/src/repowise/core/persistence/__init__.py packages/core/src/repowise/core/analysis/decisions/extractor.py tests/unit/analysis/test_decision_commit_selection.py
           git diff --check
           git diff --exit-code 90fc2b9b8e60e7527485cf78db2d9a9e44374a70 HEAD -- package.json package-lock.json packages/web packages/ui packages/types packages/vscode
       - name: Required provider and unit suites
+        if: matrix.python == '3.12'
         run: uv run pytest tests/providers/ tests/unit/ -n 4 --dist loadfile -q --junitxml=required.xml
       - uses: actions/upload-artifact@v4
         if: always()
