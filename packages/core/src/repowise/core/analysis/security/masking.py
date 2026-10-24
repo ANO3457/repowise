@@ -227,12 +227,11 @@ def mask_comments_and_strings(
             is_interpolated = False
             verbatim = False
             if char == '"' and i > 0:
-                prefix = source[:i]
-                if prefix.endswith("$"):
-                    is_interpolated = True
-                elif prefix.endswith(("$@", "@$")):
+                if source.endswith(("$@", "@$"), 0, i):
                     is_interpolated = True
                     verbatim = True
+                elif source.endswith("$", 0, i):
+                    is_interpolated = True
             if strings:
                 blank(i, i + width)
             i += width
