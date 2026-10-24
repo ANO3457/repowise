@@ -79,8 +79,9 @@ repository graph cannot observe. The one COBOL claim is a paragraph that
 nothing names and nothing falls through into, at low confidence and never
 deletion-ready.
 The COBOL and Apex grammars download on first use; offline, set
-`REPOWISE_GRAMMAR_DIR` to a pre-staged grammar cache. `repowise doctor` reports
-whether it is cached.
+`REPOWISE_GRAMMAR_DIR` to a pre-staged grammar cache. `repowise grammars fetch
+<dir>` stages that cache on a machine with network access; copy `<dir>` to the
+offline machine. `repowise doctor` reports whether each grammar is cached.
 COBOL is read in fixed reference format, with `EXEC SQL/CICS/DLI` blocks and
 `COPY` statements masked before parsing; a copybook parses as a data or
 procedure fragment. `COPY` and `EXEC SQL INCLUDE` members resolve to the
