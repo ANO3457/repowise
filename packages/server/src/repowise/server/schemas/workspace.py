@@ -421,6 +421,25 @@ class WorkspaceSystemGraphResponse(BaseModel):
     diagnostics: WorkspaceExtractionDiagnostics = WorkspaceExtractionDiagnostics()
 
 
+class WorkspaceSystemMapEdge(WorkspaceSystemEdge):
+    """An edge of the map's lean view. Mirrors ``core.workspace.system_map_view``."""
+
+    #: A co-change edge's file pairs; None on a structural edge, whose evidence
+    #: the contracts routes serve.
+    contract_refs: list[str] | None = None
+    #: Distinct refs the full edge keeps.
+    ref_count: int = 0
+
+
+class WorkspaceSystemGraphMapResponse(BaseModel):
+    """``GET /api/workspace/system-graph?view=map``: the graph without diagnostics."""
+
+    version: int = 1
+    generated_at: str = ""
+    nodes: list[WorkspaceSystemNode] = []
+    edges: list[WorkspaceSystemMapEdge] = []
+
+
 # ---------------------------------------------------------------------------
 # Cross-repo blast radius (reachability over the system graph)
 # Mirrors repowise.core.workspace.blast_radius.

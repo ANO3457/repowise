@@ -4949,12 +4949,35 @@ export interface WorkspaceSystemEdge {
   strategy?: string | null;
 }
 
+/** ``GET /api/workspace/system-graph?view=map``: the graph without diagnostics. */
+export interface WorkspaceSystemGraphMapResponse {
+  version?: number;
+  generated_at?: string;
+  nodes?: WorkspaceSystemNode[];
+  edges?: WorkspaceSystemMapEdge[];
+}
+
 export interface WorkspaceSystemGraphResponse {
   version?: number;
   generated_at?: string;
   nodes?: WorkspaceSystemNode[];
   edges?: WorkspaceSystemEdge[];
   diagnostics?: WorkspaceExtractionDiagnostics;
+}
+
+/** An edge of the map's lean view. Mirrors ``core.workspace.system_map_view``. */
+export interface WorkspaceSystemMapEdge {
+  id: string;
+  source: string;
+  target: string;
+  kind: string;
+  match_type: string;
+  confidence?: number;
+  weight?: number;
+  structural?: boolean;
+  contract_refs?: string[] | null;
+  strategy?: string | null;
+  ref_count?: number;
 }
 
 export interface WorkspaceSystemNode {
