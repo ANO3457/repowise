@@ -64,3 +64,23 @@ export function familyCounts(
 export function linkWeight(edge: { weight: number }): number {
   return edge.weight > 1 ? edge.weight : 1;
 }
+
+/** How a family is named on its chip, in the caption and in the legend. */
+export const EDGE_FAMILY_COPY: Record<EdgeFamily, { label: string; meaning: string }> = {
+  runtime: { label: "Runtime", meaning: "calls and events" },
+  data: { label: "Data", meaning: "shared databases" },
+  build: { label: "Build", meaning: "package dependencies" },
+  history: { label: "History", meaning: "files changed together" },
+};
+
+/** Edges per kind inside each family, for a chip's hover ("HTTP 7, Event 9"). */
+export function kindCountsByFamily(
+  edges: Iterable<{ kind: string; family?: string | null | undefined }>,
+): Partial<Record<EdgeFamily, Record<string, number>>> {
+  const out: Partial<Record<EdgeFamily, Record<string, number>>> = {};
+  for (const e of edges) {
+    const row = (out[edgeFamilyOf(e)] ??= {});
+    row[e.kind] = (row[e.kind] ?? 0) + 1;
+  }
+  return out;
+}
