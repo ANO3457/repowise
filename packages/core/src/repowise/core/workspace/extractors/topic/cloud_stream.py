@@ -51,46 +51,55 @@ class _CloudStreamPass:
     def scan(self, ctx: ScanContext) -> None:
         content = ctx.content
         if ctx.suffix in _YAML_EXT:
-            current_binding: tuple[str, int] | None = None
-            current_indent = -1
-            offset = 0
-            for line in content.splitlines(keepends=True):
-                m_flat = _FLAT_RE.search(line)
-                if m_flat:
-                    b_name = m_flat.group(1).split(".")[-1]
-                    dest = m_flat.group(2)
-                    self._binding_destinations[b_name] = dest
-                    role = "consumer" if "-in-" in b_name else "provider"
-                    self._binding_rows.append((ctx, b_name, dest, role, offset))
-                    offset += len(line)
-                    continue
-
-                m_b = _BINDING_KEY_RE.search(line)
-                if m_b:
-                    current_indent = len(m_b.group(1))
-                    current_binding = (m_b.group(2), offset)
-                    offset += len(line)
-                    continue
-
-                if current_binding:
-                    indent = len(line) - len(line.lstrip())
-                    if indent > current_indent:
-                        m_d = _DEST_KEY_RE.search(line)
-                        if m_d:
-                            b_name = current_binding[0]
-                            dest = m_d.group(1)
-                            self._binding_destinations[b_name] = dest
-                            role = "consumer" if "-in-" in b_name else "provider"
-                            self._binding_rows.append((ctx, b_name, dest, role, current_binding[1]))
-                            current_binding = None
-                    else:
-                        current_binding = None
-                offset += len(line)
+            self._scan_yaml(ctx, content)
 
         if "StreamBridge" in content:
             for m in _STREAM_BRIDGE_SEND_RE.finditer(content):
                 target = m.group(1)
                 self._send_calls.append((ctx, target, m.start()))
+
+    def _scan_yaml(self, ctx: ScanContext, content: str) -> None:
+        current_binding: tuple[str, int] | None = None
+        current_indent = -1
+        offset = 0
+        for line in content.splitlines(keepends=True):
+            m_flat = _FLAT_RE.search(line)
+            m_b = _BINDING_KEY_RE.search(line)
+            if m_flat:
+                self._record_binding(
+                    ctx, m_flat.group(1).split(".")[-1], m_flat.group(2), offset
+                )
+            elif m_b:
+                current_indent = len(m_b.group(1))
+                current_binding = (m_b.group(2), offset)
+            elif current_binding:
+                current_binding = self._binding_destination(
+                    ctx, line, current_binding, current_indent
+                )
+            offset += len(line)
+
+    def _binding_destination(
+        self,
+        ctx: ScanContext,
+        line: str,
+        binding: tuple[str, int],
+        binding_indent: int,
+    ) -> tuple[str, int] | None:
+        """Record a deeper ``destination`` line, or drop the stale binding."""
+        if len(line) - len(line.lstrip()) <= binding_indent:
+            return None
+        m_d = _DEST_KEY_RE.search(line)
+        if not m_d:
+            return binding
+        self._record_binding(ctx, binding[0], m_d.group(1), binding[1])
+        return None
+
+    def _record_binding(
+        self, ctx: ScanContext, b_name: str, dest: str, offset: int
+    ) -> None:
+        self._binding_destinations[b_name] = dest
+        role = "consumer" if "-in-" in b_name else "provider"
+        self._binding_rows.append((ctx, b_name, dest, role, offset))
 
     def finish(self) -> list[Contract]:
         out: list[Contract] = []
