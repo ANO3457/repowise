@@ -83,15 +83,22 @@ export function collapseToRepos(graph: SystemGraph): SystemGraph {
         id: key,
         source,
         target,
-        contract_refs: edge.contract_refs.slice(0, MAX_REFS),
+        ...(edge.contract_refs ? { contract_refs: edge.contract_refs.slice(0, MAX_REFS) } : {}),
       });
       continue;
     }
     existing.weight += edge.weight;
+    // The strategy names the strongest link, as the core graph builder keeps it.
+    if (edge.confidence > existing.confidence) existing.strategy = edge.strategy ?? null;
     existing.confidence = Math.max(existing.confidence, edge.confidence);
     existing.match_type = strongerMatch(existing.match_type, edge.match_type);
-    if (existing.contract_refs.length < MAX_REFS) {
-      existing.contract_refs = [...existing.contract_refs, ...edge.contract_refs].slice(0, MAX_REFS);
+    if (existing.contract_refs && existing.contract_refs.length < MAX_REFS) {
+      existing.contract_refs = [...existing.contract_refs, ...(edge.contract_refs ?? [])].slice(0, MAX_REFS);
+    }
+    // A lean edge carries only its count; the sum can repeat an id two
+    // services share, as the merged ref list above can.
+    if (existing.ref_count != null) {
+      existing.ref_count = Math.min(existing.ref_count + (edge.ref_count ?? 0), MAX_REFS);
     }
   }
 
@@ -108,6 +115,6 @@ export function collapseToRepos(graph: SystemGraph): SystemGraph {
     generated_at: graph.generated_at,
     nodes,
     edges,
-    diagnostics: graph.diagnostics,
+    ...(graph.diagnostics ? { diagnostics: graph.diagnostics } : {}),
   };
 }

@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeAll } from "vitest";
-import { render, screen, fireEvent, within } from "@testing-library/react";
-import type { CrossRepoBlastRadius, SystemEdge, SystemGraph, SystemNode } from "@repowise-dev/types";
+import { render, screen, fireEvent, within, waitFor } from "@testing-library/react";
+import type { CrossRepoBlastRadius, GraphEvidence, SystemEdge, SystemGraph, SystemNode } from "@repowise-dev/types";
 import { SystemMap } from "../../src/workspace/system-map/system-map";
 import { Segmented, SystemMapFilters } from "../../src/workspace/system-map/system-map-filters";
 import { SystemMapLegend } from "../../src/workspace/system-map/system-map-legend";
+import { SystemMapEvidenceNotice } from "../../src/workspace/system-map/system-map-evidence-notice";
 import { SystemMapDrawer, selectionRepo } from "../../src/workspace/system-map/system-map-drawer";
 import { SystemMapFindings } from "../../src/workspace/system-map/system-map-findings";
 import { resolveViewSelection } from "../../src/workspace/system-map/system-map-model";
@@ -216,6 +217,20 @@ describe("SystemMapFindings", () => {
     expect(screen.getByRole("button", { name: "Break the cycle" })).toBeInTheDocument();
     expect(screen.queryByText(/no dependency cycles/i)).not.toBeInTheDocument();
   });
+
+  it("never counts in-service calls as unmatched, even on an older artifact", () => {
+    const call = (reason: "no_provider" | "internal_only") => ({
+      repo: "a", file_path: "x.ts", contract_id: "GET /x", contract_type: "http", reason,
+    });
+    // Before in-service calls were split out, they sat in the unmatched list.
+    const diagnostics = {
+      unmatched_consumers: [call("no_provider"), call("internal_only"), call("internal_only")],
+      unmatched_by_reason: { no_provider: 1, internal_only: 2 },
+    } as never;
+    render(<SystemMapFindings {...base} conformance={conformance} breaking={breaking} diagnostics={diagnostics} />);
+    expect(screen.getByText(/1 call to a contract match no provider in the workspace/)).toBeInTheDocument();
+    expect(screen.queryByText(/inside their own service/)).not.toBeInTheDocument();
+  });
 });
 
 describe("resolveViewSelection", () => {
@@ -255,6 +270,48 @@ describe("SystemMapLegend", () => {
     expect(screen.queryByText(/candidate/i)).not.toBeInTheDocument();
     expect(screen.getByText("Healthy 8+")).toBeInTheDocument();
     expect(screen.getByText("Alert below 4")).toBeInTheDocument();
+    expect(screen.queryByText(/gateway route/i)).not.toBeInTheDocument();
+  });
+
+  it("names gateway-routed lines in words when the graph has any", () => {
+    render(<SystemMapLegend matchTypes={new Set(["exact"])} gatewayRouted={2} />);
+    expect(screen.getByText(/lines run through a gateway route/i)).toBeInTheDocument();
+  });
+});
+
+describe("SystemMapEvidenceNotice", () => {
+  const evidence = (state: GraphEvidence["state"], summary: string): GraphEvidence => ({
+    state,
+    determined: state !== "insufficient",
+    summary,
+    reasons: [],
+    services: 3,
+    runtime_edges: 0,
+    build_edges: 2,
+    providers: 4,
+    consumers: 1,
+  });
+
+  it("renders nothing when the evidence is measured or absent", () => {
+    const { container, rerender } = render(<SystemMapEvidenceNotice evidence={evidence("measured", "")} />);
+    expect(container).toBeEmptyDOMElement();
+    rerender(<SystemMapEvidenceNotice evidence={null} />);
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("names the state and the reason as one sentence", () => {
+    const { rerender } = render(
+      <SystemMapEvidenceNotice evidence={evidence("partial", "every detected dependency is a build reference")} />,
+    );
+    expect(screen.getByRole("status")).toHaveTextContent("Partial evidence");
+    expect(screen.getByText("Every detected dependency is a build reference.")).toBeInTheDocument();
+    rerender(
+      <SystemMapEvidenceNotice
+        evidence={evidence("insufficient", "no service carries a contract")}
+        insufficientLabel="Unknown here"
+      />,
+    );
+    expect(screen.getByRole("status")).toHaveTextContent("Unknown here");
   });
 });
 
@@ -358,6 +415,36 @@ describe("SystemMapDrawer", () => {
     expect(screen.queryByRole("link", { name: /overview\.py/ })).not.toBeInTheDocument();
   });
 
+  it("states a lean edge's evidence count without claiming it kept none", () => {
+    const { contract_refs: _refs, ...lean } = edge("web", "api", { weight: 2, ref_count: 2 });
+    const g2 = graph([node("web"), node("api")], [lean]);
+    render(
+      <SystemMapDrawer graph={g2} rawGraph={g2} collapsed={false} onClose={() => {}} onSelect={() => {}} selection={{ type: "edge", id: "web->api" }} />,
+    );
+    expect(screen.getByText("2 references")).toBeInTheDocument();
+    expect(screen.getByText(/The graph kept 2 contract ids for this edge/)).toBeInTheDocument();
+    expect(screen.queryByText(/kept no evidence/)).not.toBeInTheDocument();
+  });
+
+  it("reads a service's diagnostics from the host when the graph has none", () => {
+    const { diagnostics: _d, ...lean } = g;
+    render(
+      <SystemMapDrawer
+        {...base}
+        graph={lean}
+        rawGraph={lean}
+        selection={{ type: "node", id: "web" }}
+        onSelect={() => {}}
+        diagnostics={{
+          unmatched_consumers: [
+            { repo: "web", file_path: "client.ts", contract_id: "http::GET::/x", contract_type: "http", reason: "no_provider" },
+          ],
+        } as never}
+      />,
+    );
+    expect(screen.getByText(/1 call from here match/)).toBeInTheDocument();
+  });
+
   it("renders nothing when there is no selection", () => {
     render(<SystemMapDrawer {...base} selection={null} onSelect={() => {}} />);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -392,6 +479,31 @@ describe("SystemMap chrome placement", () => {
     expect(within(dialog).getByText(/api provides 2 contracts/i)).toBeInTheDocument();
     const flow = container.querySelector(".react-flow")!;
     expect(flow.contains(dialog)).toBe(false);
+  });
+
+  it("reports aggregate, layout and paint to onPhase, in order", async () => {
+    const onPhase = vi.fn();
+    render(<SystemMap graph={g} onPhase={onPhase} />);
+    await waitFor(() => expect(onPhase).toHaveBeenLastCalledWith("paint"));
+    expect(onPhase.mock.calls.map(([p]) => p)).toEqual(["aggregate", "layout", "paint"]);
+  });
+
+  it("reports no phase when there is no graph to lay out", async () => {
+    const onPhase = vi.fn();
+    render(<SystemMap graph={null} error={new Error("boom")} onPhase={onPhase} />);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(onPhase).not.toHaveBeenCalled();
+  });
+
+  it("reports layout only once the new graph's layout has run", async () => {
+    const onPhase = vi.fn();
+    const { rerender } = render(<SystemMap graph={g} onPhase={onPhase} />);
+    await waitFor(() => expect(onPhase).toHaveBeenLastCalledWith("paint"));
+    onPhase.mockClear();
+    const next = graph([...g.nodes, node("db")], [...g.edges, edge("api", "db", { kind: "db" })]);
+    rerender(<SystemMap graph={next} onPhase={onPhase} />);
+    await waitFor(() => expect(onPhase).toHaveBeenLastCalledWith("paint"));
+    expect(onPhase.mock.calls.map(([p]) => p)).toEqual(["aggregate", "layout", "paint"]);
   });
 
   it("puts the host's toolbar in the section header, not on the canvas", () => {

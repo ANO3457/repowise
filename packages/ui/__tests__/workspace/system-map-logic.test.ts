@@ -6,10 +6,11 @@ import {
   applyView,
   computeSystemMapPositions,
   layoutSignature,
-  SYSTEM_MAP_MAX_LAYOUT_NODES,
 } from "../../src/workspace/system-map/layout";
 import {
   edgeKindStyle,
+  edgeLabel,
+  isGatewayRouted,
   matchTypeDash,
   matchTypeLabel,
   EDGE_KIND_ORDER,
@@ -104,6 +105,16 @@ describe("collapseToRepos", () => {
     expect(e.match_type).toBe("exact"); // strongest
   });
 
+  it("merges the lean map view's counts where it has no refs to merge", () => {
+    const { contract_refs: _a, ...a } = edge("web", "api::a", { ref_count: 2 });
+    const { contract_refs: _b, ...b } = edge("web", "api::b", { ref_count: 3 });
+    const { diagnostics: _d, ...lean } = graph([node("api::a", "api"), node("api::b", "api"), node("web", "web")], [a, b]);
+    const collapsed = collapseToRepos(lean);
+    expect(collapsed.edges[0]!.ref_count).toBe(5);
+    expect(collapsed.edges[0]!.contract_refs).toBeUndefined();
+    expect(collapsed.diagnostics).toBeUndefined();
+  });
+
   it("keeps different edge kinds between the same repos distinct", () => {
     const g = graph(
       [node("web", "web"), node("api", "api")],
@@ -133,6 +144,19 @@ describe("collapseToRepos", () => {
       [],
     );
     expect(collapseToRepos(mixed).nodes[0]!.kind).toBe("service");
+  });
+
+  it("keeps the strategy of the strongest merged link, as the core builder does", () => {
+    const g = graph(
+      [node("api::a", "api"), node("api::b", "api"), node("gw", "gw")],
+      [
+        edge("gw", "api::a", { confidence: 0.6, strategy: "prefix_stripped" }),
+        edge("gw", "api::b", { confidence: 1, strategy: "gateway_route" }),
+      ],
+    );
+    expect(collapseToRepos(g).edges[0]!.strategy).toBe("gateway_route");
+    const weakerSecond = graph(g.nodes, [g.edges[1]!, { ...g.edges[0]!, id: "x" }]);
+    expect(collapseToRepos(weakerSecond).edges[0]!.strategy).toBe("gateway_route");
   });
 });
 
@@ -179,6 +203,15 @@ describe("edge-kind registry", () => {
   it("marks co-change as the only behavioral kind", () => {
     expect(edgeKindStyle("co_change").category).toBe("behavioral");
     expect(edgeKindStyle("http").category).toBe("structural");
+  });
+
+  it("names a gateway-routed link in words, keeping its transport kind", () => {
+    const routed = { kind: "http" as const, strategy: "gateway_route" };
+    expect(isGatewayRouted(routed)).toBe(true);
+    expect(edgeLabel(routed)).toBe("HTTP via gateway");
+    expect(edgeKindStyle(routed.kind).label).toBe("HTTP");
+    expect(isGatewayRouted({ strategy: "service_mapped" })).toBe(false);
+    expect(edgeLabel({ kind: "http", strategy: null })).toBe("HTTP");
   });
 
   it("falls back gracefully for an unknown kind", () => {
@@ -539,23 +572,10 @@ describe("layout stability under filtering", () => {
 });
 
 describe("computeSystemMapPositions", () => {
-  it("lays out a normal graph with ELK and reports it is not simplified", async () => {
-    const result = await computeSystemMapPositions(
+  it("lays out a graph with ELK", async () => {
+    const positions = await computeSystemMapPositions(
       graph([node("api", "api"), node("web", "web")], [edge("web", "api")]),
     );
-    expect(result.simplified).toBe(false);
-    expect(result.positions.size).toBe(2);
-  });
-
-  it("falls back to a grid above the layout bound and says so", async () => {
-    const many = Array.from({ length: SYSTEM_MAP_MAX_LAYOUT_NODES + 1 }, (_, i) =>
-      node(`n${i}`, `r${i}`),
-    );
-    const result = await computeSystemMapPositions(graph(many, []));
-    expect(result.simplified).toBe(true);
-    expect(result.positions.size).toBe(many.length);
-    // A grid, not a pile: no two nodes share a position.
-    const seen = new Set([...result.positions.values()].map((p) => `${p.x},${p.y}`));
-    expect(seen.size).toBe(many.length);
+    expect(positions.size).toBe(2);
   });
 });
