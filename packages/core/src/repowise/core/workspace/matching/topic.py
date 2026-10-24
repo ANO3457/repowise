@@ -99,21 +99,26 @@ def pattern_matches(syntax: str, pattern: str, name: str) -> bool:
     return False
 
 
+def _celery_suffix_keys(
+    consumer: Contract, provider_index: dict[str, list[Contract]], known: list[str]
+) -> list[str]:
+    """Keys whose dotted function suffix matches a Celery consumer's suffix."""
+    function = str(consumer.meta.get("topic", "")).lower().split(".")[-1]
+    return [
+        key
+        for key, providers in provider_index.items()
+        if key.startswith(TOPIC_PREFIX)
+        and key not in known
+        and key[len(TOPIC_PREFIX) :].lower().split(".")[-1] == function
+        and any(p.meta.get("broker") == "celery" for p in providers)
+    ]
+
+
 def matching_keys(consumer: Contract, provider_index: dict[str, list[Contract]]) -> list[str]:
     """The provider keys *consumer* reaches: its own id, and every name its pattern matches."""
     keys = find_matching_keys(consumer.contract_id, provider_index)
     if consumer.meta.get("broker") == "celery":
-        c_topic = str(consumer.meta.get("topic", "")).lower()
-        c_func = c_topic.split(".")[-1]
-        for k in provider_index:
-            if k.startswith(TOPIC_PREFIX) and k not in keys:
-                p_topic = k[len(TOPIC_PREFIX) :].lower()
-                p_func = p_topic.split(".")[-1]
-                if p_func == c_func:
-                    for p in provider_index[k]:
-                        if p.meta.get("broker") == "celery":
-                            keys.append(k)
-                            break
+        keys.extend(_celery_suffix_keys(consumer, provider_index, keys))
     syntax = consumer.meta.get(TOPIC_PATTERN)
     pattern = str(consumer.meta.get("topic", ""))
     if not syntax or not _WILDCARD_CHARS_RE.sub("", pattern):
