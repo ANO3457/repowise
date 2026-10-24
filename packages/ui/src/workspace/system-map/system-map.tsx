@@ -55,6 +55,8 @@ export interface SystemMapProps {
   overlay?: SystemMapOverlay;
   /** Per-service architecture role, named on cards and in the rail (optional). */
   roleByNodeId?: ReadonlyMap<string, NodeArchitectureRole>;
+  /** The section heading, in the title row beside the lens. */
+  title?: string;
   /** The lens control, in the title row. */
   toolbar?: ReactNode;
   /** More title-row controls after the lens (search, a between picker). */
@@ -250,6 +252,7 @@ function SystemMapInner(props: SystemMapProps) {
         <GraphCanvasShell
           variant="section"
           breadcrumb={breadcrumb}
+          title={props.title}
           titleActions={toolbar || extraActions || betweenControl ? <>{toolbar}{extraActions}{betweenControl}</> : undefined}
           banner={banner}
           rail={railNode}
