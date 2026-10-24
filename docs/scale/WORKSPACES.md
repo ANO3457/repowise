@@ -142,7 +142,7 @@ Scans source files for HTTP routes, gRPC services, database tables, message topi
 | Python | FastAPI, Flask, Django | requests, httpx (aiohttp through wrappers the index confirms); Locust user `client` calls |
 | PHP | Laravel | Guzzle, Laravel `Http` |
 | Java / Kotlin | Spring, JAX-RS, Micronaut | Feign (`@RequestLine`, and `@FeignClient` with Spring MVC annotations, its `name` read as the host), Spring `@HttpExchange` interfaces, Spring `WebClient` and `RestClient`, `RestTemplate` (also through a getter or a `RequestEntity`), `java.net.http`, Apache HttpClient (`new HttpPost(url)`, with a base URL passed to a helper's constructor in another file), MicroProfile `@RegisterRestClient` interfaces, Ktor (Kotlin) |
-| Go | gin, echo, chi, net/http | net/http |
+| Go | gin, echo, chi, fiber, gorilla/mux, net/http (Go 1.22 method patterns) | net/http |
 | C# | ASP.NET (attribute and minimal API) | HttpClient (`GetAsync`, `GetFromJsonAsync`, `PostAsJsonAsync`, `GetStringAsync`, `new HttpRequestMessage(HttpMethod.X, url)`; a URL held in a local or a `const` / `readonly` field), UnityWebRequest, Best.HTTP |
 | Ruby | | HTTParty, RestClient, Faraday, Net::HTTP |
 | Rust | Axum, Actix, Rocket | reqwest |
