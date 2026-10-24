@@ -147,7 +147,10 @@ links are appended after it.
 5. **Service links**: `service_pass` gives each HTTP consumer whose target is a
    workspace repo, but whose path no provider serves, one `host_only` link with no
    provider file. These live in `ContractStore.service_links`, apart from
-   `contract_links`. A target that only equals a repo alias draws none.
+   `contract_links`. A target that only equals a repo alias draws none. A gateway's
+   edge to each service it routes to is a `gateway_route` service link, while a
+   consumer call routed through that gateway to a served route is a `gateway_route`
+   link in `contract_links`.
 6. **Manual links** from `contracts.manual_links` are appended with strategy
    `manual`.
 
@@ -208,6 +211,7 @@ does with it:
 | Conformance, `workspace check` | `cycles_determined: false`; "dependency cycles not determined", exit 0 | "no dependency cycles among the edges detected (partial evidence)" |
 | Blast radius | `evidence` attached | `evidence` attached |
 | MCP `get_architecture`, `get_blast_radius`, `get_conformance`, REST | Carry the same `evidence` block | Same |
+| MCP `get_risk`, `get_change_risk` cross-repo parts | `graph_evidence` with state and reason | Same |
 
 In every state, blast radius lists in `undetermined_targets` each target the walked
 adjacency has no edge at, so an empty impact set there reads as not seen.
