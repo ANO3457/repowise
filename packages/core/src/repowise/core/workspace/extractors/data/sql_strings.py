@@ -120,6 +120,15 @@ def _opens_with_sql(literal: str) -> bool:
     return bool(_SQL_OPENER_RE.match(stripped))
 
 
+def _is_sql_literal(literal: str) -> bool:
+    """Apply the same SQL/prose boundary to plain and annotation literals."""
+    if len(literal) < _MIN_LITERAL_LEN or not _opens_with_sql(literal):
+        return False
+    if not _SQL_VERB_RE.search(literal):
+        return False
+    return bool(_UPPER_VERB_RE.search(literal) or _SQL_PUNCT_RE.search(literal))
+
+
 def _verb_for_statement(stmt: object) -> str:
     kind = type(stmt).__name__.lower()
     return kind if kind in ("insert", "update", "delete", "merge") else "select"
@@ -168,22 +177,12 @@ class SqlStringsDialect:
             frags = _MYBATIS_STRING_RE.findall(m.group(1))
             if frags:
                 joined = " ".join(f.replace(r"\"", '"').replace(r"\'", "'") for f in frags)
-                if (
-                    len(joined) >= _MIN_LITERAL_LEN
-                    and _opens_with_sql(joined)
-                    and _SQL_VERB_RE.search(joined)
-                    and (_UPPER_VERB_RE.search(joined) or _SQL_PUNCT_RE.search(joined))
-                ):
+                if _is_sql_literal(joined):
                     literals.append((joined, line_at(content, m.start())))
 
         for m in _STRING_RE.finditer(content):
             s = next(g for g in m.groups() if g is not None)
-            if (
-                len(s) >= _MIN_LITERAL_LEN
-                and _opens_with_sql(s)
-                and _SQL_VERB_RE.search(s)
-                and (_UPPER_VERB_RE.search(s) or _SQL_PUNCT_RE.search(s))
-            ):
+            if _is_sql_literal(s):
                 literals.append((s, line_at(content, m.start())))
         return literals
 
