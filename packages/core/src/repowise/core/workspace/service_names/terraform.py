@@ -75,6 +75,17 @@ def _literal(token: str) -> str | None:
     return value if "${" not in value and "%{" not in value else None
 
 
+def _expression_end(tokens: list[str], start: int) -> int:
+    i = start
+    while i < len(tokens) and tokens[i] not in {"\n", ","}:
+        if tokens[i] in _PAIRS:
+            i = _close(tokens, i)
+            if i < 0:
+                return -1
+        i += 1
+    return i
+
+
 def _fields(tokens: list[str]) -> Iterator[tuple[str, list[str]]]:
     i = 0
     while i < len(tokens):
@@ -85,14 +96,10 @@ def _fields(tokens: list[str]) -> Iterator[tuple[str, list[str]]]:
             i = end + 1
         elif i + 1 < len(tokens) and tokens[i + 1] == "=":
             key = _literal(tokens[i]) if tokens[i].startswith('"') else tokens[i]
-            start = i = i + 2
-            while i < len(tokens) and tokens[i] not in {"\n", ","}:
-                if tokens[i] in _PAIRS:
-                    end = _close(tokens, i)
-                    if end < 0:
-                        return
-                    i = end
-                i += 1
+            start = i + 2
+            i = _expression_end(tokens, start)
+            if i < 0:
+                return
             if key:
                 yield key, tokens[start:i]
         else:
@@ -148,6 +155,14 @@ def _object_list(tokens: list[str]) -> Iterator[list[str]]:
         i = end + 1
 
 
+def _container_environment(tokens: list[str]) -> Iterator[Claim]:
+    for field, value in _fields(tokens):
+        if field != "environment":
+            continue
+        for item in _object_list(value):
+            yield from _named_envs(item)
+
+
 def _ecs(tokens: list[str]) -> Iterator[Claim]:
     for key, expr in _fields(tokens):
         if (
@@ -157,10 +172,7 @@ def _ecs(tokens: list[str]) -> Iterator[Claim]:
         ):
             continue
         for container in _object_list(expr[2:-1]):
-            for field, value in _fields(container):
-                if field == "environment":
-                    for item in _object_list(value):
-                        yield from _named_envs(item)
+            yield from _container_environment(container)
 
 
 def _lambda(tokens: list[str]) -> Iterator[Claim]:
