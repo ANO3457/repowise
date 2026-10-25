@@ -34,7 +34,7 @@ export function SettingsNav({
                 href={href}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "flex rounded-md px-2.5 py-1.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-primary)]",
+                  "flex rounded-md px-2.5 py-1.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]",
                   active
                     ? "bg-[var(--color-bg-wash)] font-medium text-[var(--color-text-primary)]"
                     : "text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-wash)] hover:text-[var(--color-text-primary)]",
