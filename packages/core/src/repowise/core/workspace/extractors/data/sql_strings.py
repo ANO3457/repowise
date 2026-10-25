@@ -28,6 +28,12 @@ from .dialect import build_table_consumer
 if TYPE_CHECKING:
     from repowise.core.workspace.contracts import Contract
 
+_MYBATIS_ARRAY_RE = re.compile(
+    r"@(?:Select|Insert|Update|Delete)\s*\(\s*\{((?:[^{}]|\{[^}]*\})*)\}\s*\)",
+    re.MULTILINE | re.DOTALL,
+)
+_MYBATIS_STRING_RE = re.compile(r'"((?:[^"\\\n]|\\.)*)"')
+
 # String-literal shapes as ONE left-to-right alternation (longest delimiter
 # first within the alternation). A single scan matters: whichever literal
 # *starts* first consumes its full span, so a double-quoted fragment inside a
@@ -35,12 +41,6 @@ if TYPE_CHECKING:
 # string instead of being lexed as its own literal. Template literals and
 # verbatim strings are included; the interpolation guard (rule 3) handles
 # their placeholders.
-_MYBATIS_ARRAY_RE = re.compile(
-    r"@(?:Select|Insert|Update|Delete)\s*\(\s*\{((?:[^{}]|\{[^}]*\})*)\}\s*\)",
-    re.MULTILINE | re.DOTALL,
-)
-_MYBATIS_STRING_RE = re.compile(r'"((?:[^"\\\n]|\\.)*)"')
-
 _STRING_RE = re.compile(
     r'"""(?P<t1>.*?)"""'
     r"|'''(?P<t2>.*?)'''"
