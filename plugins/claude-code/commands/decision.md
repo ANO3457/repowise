@@ -44,8 +44,8 @@ unless the repository turns it on.
 - **candidates** — `repowise decision candidates --format json` — records
   awaiting review, each with its id and the `blockers` that stop it being accepted.
 - **confirm** — `repowise decision confirm <id>...` — accept candidates so they
-  govern. `--reason`, `--scope <path>` and `--evidence <commit|file|link>` fill
-  the blockers. An agent signs with `--agent <slug>`, which works only where
+  govern. `--decision`, `--reason`, `--scope <path>` and
+  `--evidence <commit|file|link>` fill the blockers. An agent signs with `--agent <slug>`, which works only where
   the repository has run `repowise decision config agent-acceptance --on`;
   otherwise leave acceptance to a person.
 - **deprecate / dismiss** — `repowise decision deprecate <id>` (optionally
