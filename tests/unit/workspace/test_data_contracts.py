@@ -309,14 +309,37 @@ class TestSqlStringConsumers:
         contracts = DataExtractor().extract(tmp_path, "api", make_exclude_predicate())
         assert contracts == []
 
+    def test_mybatis_array_annotation_joined_as_consumer(self, tmp_path: Path) -> None:
+        _write(
+            tmp_path,
+            "src/main/java/com/example/CustomerMapper.java",
+            """
+            package com.example;
+            public interface CustomerMapper {
+                @Update({
+                    "UPDATE customers",
+                    "SET name = #{name}, email = #{email}",
+                    "WHERE id = #{id}"
+                })
+                int updateCustomer(Customer c);
+
+                @Select({"SELECT id, total", "FROM orders", "WHERE status = 'active'"})
+                List<Order> findActive();
+            }
+            """,
+        )
+        contracts = DataExtractor().extract(tmp_path, "shop")
+        ids = {c.contract_id for c in contracts if c.role == "consumer"}
+        assert ids == {"data::customers", "data::orders"}
+
     def test_system_catalogs_and_alembic_version_skipped(self, tmp_path: Path) -> None:
         _write(
             tmp_path,
             "scripts/promote.py",
             'q1 = "SELECT datname FROM pg_database WHERE datistemplate = false"\n'
             'q2 = "SELECT rolname FROM pg_roles WHERE rolcanlogin = true"\n'
-            'q3 = "SELECT relname FROM pg_class WHERE relkind = \'r\'"\n'
-            'q4 = "SELECT table_name FROM information_schema.tables WHERE table_schema = \'public\'"\n'
+            "q3 = \"SELECT relname FROM pg_class WHERE relkind = 'r'\"\n"
+            "q4 = \"SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'\"\n"
             'q5 = "SELECT version_num FROM alembic_version"\n'
             'q6 = "SELECT nspname FROM pg_catalog.pg_namespace"\n'
             'q7 = "SELECT id FROM orders WHERE promoted = true"\n',
@@ -407,9 +430,7 @@ class TestDataMatching:
         _write(
             worker,
             "job.py",
-            "import psycopg\n"
-            'URL = "postgresql://db/app"\n'
-            'q = "SELECT id FROM repos WHERE x = 1"\n',
+            'import psycopg\nURL = "postgresql://db/app"\nq = "SELECT id FROM repos WHERE x = 1"\n',
         )
         contracts = DataExtractor().extract(backend, "backend")
         contracts += DataExtractor().extract(worker, "worker")
@@ -429,7 +450,11 @@ def _data(repo: Path, alias: str = "app") -> dict[tuple[str, str], dict]:
 
 class TestLaravelData:
     def test_model_table_follows_the_naming_convention(self, tmp_path: Path) -> None:
-        _write(tmp_path, "app/Models/GuestlistEntry.php", _ELOQUENT_HEAD + "class GuestlistEntry extends Model {}\n")
+        _write(
+            tmp_path,
+            "app/Models/GuestlistEntry.php",
+            _ELOQUENT_HEAD + "class GuestlistEntry extends Model {}\n",
+        )
         _write(
             tmp_path,
             "app/Models/User.php",
@@ -445,14 +470,21 @@ class TestLaravelData:
         _write(
             tmp_path,
             "app/Models/Table.php",
-            _ELOQUENT_HEAD + "class Table extends Model {\n    protected $table = 'venue_tables';\n}\n",
+            _ELOQUENT_HEAD
+            + "class Table extends Model {\n    protected $table = 'venue_tables';\n}\n",
         )
         assert set(_data(tmp_path)) == {("data::venue_tables", "eloquent")}
 
     def test_the_convention_needs_eloquent_and_a_concrete_class(self, tmp_path: Path) -> None:
         # Another library's `Model`, and an abstract base, name no table.
-        _write(tmp_path, "src/Widget.php", "<?php\nuse Acme\\Model;\nclass Widget extends Model {}\n")
-        _write(tmp_path, "app/Models/Base.php", _ELOQUENT_HEAD + "abstract class Base extends Model {}\n")
+        _write(
+            tmp_path, "src/Widget.php", "<?php\nuse Acme\\Model;\nclass Widget extends Model {}\n"
+        )
+        _write(
+            tmp_path,
+            "app/Models/Base.php",
+            _ELOQUENT_HEAD + "abstract class Base extends Model {}\n",
+        )
         assert _data(tmp_path) == {}
 
     def test_migrations_create_and_alter_with_schema_meta(self, tmp_path: Path) -> None:
@@ -494,7 +526,9 @@ class TestLaravelData:
         }
 
     def test_less_common_spellings(self, tmp_path: Path) -> None:
-        _write(tmp_path, "app/Models/Seat.php", _ELOQUENT_HEAD + "final class Seat extends Model {}\n")
+        _write(
+            tmp_path, "app/Models/Seat.php", _ELOQUENT_HEAD + "final class Seat extends Model {}\n"
+        )
         _write(
             tmp_path,
             "app/Jobs/Sync.php",
@@ -554,10 +588,20 @@ class TestSharedTables:
             "database/migrations/2024_create_events.php",
             "<?php\nSchema::create('events', function ($t) {});\n",
         )
-        _write(tmp_path / "api", "app/Models/Event.php", _ELOQUENT_HEAD + "class Event extends Model {}\n")
-        _write(tmp_path / "admin", "app/Models/Event.php", _ELOQUENT_HEAD + "class Event extends Model {}\n")
+        _write(
+            tmp_path / "api",
+            "app/Models/Event.php",
+            _ELOQUENT_HEAD + "class Event extends Model {}\n",
+        )
+        _write(
+            tmp_path / "admin",
+            "app/Models/Event.php",
+            _ELOQUENT_HEAD + "class Event extends Model {}\n",
+        )
         links = match_contracts(self._extract(tmp_path, "admin", "api"))
-        assert [(k.consumer_repo, k.consumer_file, k.provider_repo, k.provider_file) for k in links] == [
+        assert [
+            (k.consumer_repo, k.consumer_file, k.provider_repo, k.provider_file) for k in links
+        ] == [
             ("admin", "app/Models/Event.php", "api", "database/migrations/2024_create_events.php")
         ]
         assert links[0].contract_type == "data"
@@ -565,7 +609,11 @@ class TestSharedTables:
     def test_models_alone_say_nothing(self, tmp_path: Path) -> None:
         # Nobody defines the schema, so nothing says whose table it is.
         for alias in ("a", "b"):
-            _write(tmp_path / alias, "app/Models/Venue.php", _ELOQUENT_HEAD + "class Venue extends Model {}\n")
+            _write(
+                tmp_path / alias,
+                "app/Models/Venue.php",
+                _ELOQUENT_HEAD + "class Venue extends Model {}\n",
+            )
         assert match_contracts(self._extract(tmp_path, "a", "b")) == []
 
     def test_two_apps_migrating_one_table_name_are_not_linked(self, tmp_path: Path) -> None:
@@ -576,24 +624,40 @@ class TestSharedTables:
                 "database/migrations/0001_create_users_table.php",
                 "<?php\nSchema::create('users', function ($t) {});\n",
             )
-            _write(tmp_path / alias, "app/Models/User.php", _ELOQUENT_HEAD + "class User extends Model {}\n")
+            _write(
+                tmp_path / alias,
+                "app/Models/User.php",
+                _ELOQUENT_HEAD + "class User extends Model {}\n",
+            )
         assert match_contracts(self._extract(tmp_path, "shop", "blog")) == []
 
     def test_an_alter_only_owner_still_owns(self, tmp_path: Path) -> None:
         _write(tmp_path / "api", "db/002.sql", "ALTER TABLE seats ADD COLUMN row INT;")
-        _write(tmp_path / "admin", "app/Models/Seat.php", _ELOQUENT_HEAD + "class Seat extends Model {}\n")
+        _write(
+            tmp_path / "admin",
+            "app/Models/Seat.php",
+            _ELOQUENT_HEAD + "class Seat extends Model {}\n",
+        )
         links = match_contracts(self._extract(tmp_path, "admin", "api"))
         assert [(k.consumer_repo, k.provider_repo) for k in links] == [("admin", "api")]
 
     def test_one_service_declaring_twice_shares_nothing(self, tmp_path: Path) -> None:
         _write(tmp_path / "api", "db/schema.sql", "CREATE TABLE zones (id INT);")
-        _write(tmp_path / "api", "app/Models/Zone.php", _ELOQUENT_HEAD + "class Zone extends Model {}\n")
+        _write(
+            tmp_path / "api",
+            "app/Models/Zone.php",
+            _ELOQUENT_HEAD + "class Zone extends Model {}\n",
+        )
         assert match_contracts(self._extract(tmp_path, "api")) == []
 
     def test_readers_and_models_both_link(self, tmp_path: Path) -> None:
         # The shared-table pass adds to the exact pass; it does not replace it.
         _write(tmp_path / "api", "db/schema.sql", "CREATE TABLE refunds (id INT);")
-        _write(tmp_path / "admin", "app/Models/Refund.php", _ELOQUENT_HEAD + "class Refund extends Model {}\n")
+        _write(
+            tmp_path / "admin",
+            "app/Models/Refund.php",
+            _ELOQUENT_HEAD + "class Refund extends Model {}\n",
+        )
         _write(tmp_path / "worker", "job.py", 'q = "SELECT id FROM refunds WHERE x = 1"\n')
         links = match_contracts(self._extract(tmp_path, "api", "admin", "worker"))
         assert sorted((k.consumer_repo, k.provider_repo) for k in links) == [

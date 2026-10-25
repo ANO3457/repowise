@@ -35,6 +35,12 @@ if TYPE_CHECKING:
 # string instead of being lexed as its own literal. Template literals and
 # verbatim strings are included; the interpolation guard (rule 3) handles
 # their placeholders.
+_MYBATIS_ARRAY_RE = re.compile(
+    r"@(?:Select|Insert|Update|Delete)\s*\(\s*\{((?:[^{}]|\{[^}]*\})*)\}\s*\)",
+    re.MULTILINE | re.DOTALL,
+)
+_MYBATIS_STRING_RE = re.compile(r'"((?:[^"\\\n]|\\.)*)"')
+
 _STRING_RE = re.compile(
     r'"""(?P<t1>.*?)"""'
     r"|'''(?P<t2>.*?)'''"
@@ -158,6 +164,18 @@ class SqlStringsDialect:
     def _sql_literals(content: str) -> list[tuple[str, int]]:
         """``(literal, line)`` for each SQL-looking string literal in *content*."""
         literals: list[tuple[str, int]] = []
+        for m in _MYBATIS_ARRAY_RE.finditer(content):
+            frags = _MYBATIS_STRING_RE.findall(m.group(1))
+            if frags:
+                joined = " ".join(f.replace(r"\"", '"').replace(r"\'", "'") for f in frags)
+                if (
+                    len(joined) >= _MIN_LITERAL_LEN
+                    and _opens_with_sql(joined)
+                    and _SQL_VERB_RE.search(joined)
+                    and (_UPPER_VERB_RE.search(joined) or _SQL_PUNCT_RE.search(joined))
+                ):
+                    literals.append((joined, line_at(content, m.start())))
+
         for m in _STRING_RE.finditer(content):
             s = next(g for g in m.groups() if g is not None)
             if (
@@ -202,9 +220,7 @@ class SqlStringsDialect:
             # reads. sqlglot models a reference to one as exp.Table all the
             # same, so ``WITH ranked AS (...) ... FROM ranked`` reported a
             # table named ``ranked``. Only unqualified references shadow.
-            cte_names = {
-                cte.alias.lower() for cte in stmt.find_all(exp.CTE) if cte.alias
-            }
+            cte_names = {cte.alias.lower() for cte in stmt.find_all(exp.CTE) if cte.alias}
             for table in stmt.find_all(exp.Table):
                 name = table.name
                 if not name:
