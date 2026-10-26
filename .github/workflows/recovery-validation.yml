@@ -1,0 +1,48 @@
+name: Clean recovery validation
+
+on:
+  push:
+    branches: [validation/recovery-oct26]
+    paths: [.github/workflows/recovery-validation.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - label: cobol-mapset-4478
+            ref: 61fdec3c07d6f23f02310a7c130c9829b07f75a4
+          - label: go-generated-4568
+            ref: 17a0ab84d24969c907ed53c4eaa43272d4b405c1
+          - label: named-catchall-4564
+            ref: 9d6da4a5765cbdb47267657486c51252c29f820b
+    env:
+      DO_NOT_TRACK: '1'
+      REPOWISE_SKIP_EDITOR_SETUP: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.ref }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v3
+      - name: Install Python
+        run: uv python install 3.12
+      - name: Install locked workspace
+        run: uv sync --all-packages --locked --python 3.12
+      - name: Lint
+        run: uv run --locked ruff check .
+      - name: Provider and unit tests
+        run: uv run --locked pytest tests/providers/ tests/unit/ -n 2 --dist loadfile -o 'addopts=-q --tb=short' --junitxml=recovery-results.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: recovery-${{ matrix.label }}
+          path: recovery-results.xml
+          if-no-files-found: warn
