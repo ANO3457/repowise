@@ -415,6 +415,8 @@ def _walk_function_body(
     # switch count toward CCN but sit in the level their switch opened.
     flat_arm_ids: set[int] = set()
     switch_arm_ids: set[int] = set()
+    # Dart ``on T { }`` handlers with no ``catch``: see ``_bare_on_handlers``.
+    bare_handler_ids: set[int] = set()
     deepest_depth = 0
     deepest_node: list[Node] = []
 
@@ -463,32 +465,17 @@ def _walk_function_body(
                 or _is_flat_ternary(node, lmap, in_markup)
             ):
                 nesting_increment = 1
-            # Side-channel: count compound boolean ops in this
-            # construct's condition. Does not affect ccn/cognitive
-            # (boolean operators are still tallied independently by
-            # the regular recursion below).
-            op_count = 0
-            op_kinds: set[str] = set()
-            negated = False
-            for sub in _condition_subtrees(node, lmap):
-                sub_count, sub_kinds, sub_negated = _count_boolean_ops_in_condition(sub, lmap)
-                op_count += sub_count
-                op_kinds |= sub_kinds
-                negated = negated or sub_negated
-            if op_count > 0:
-                conditions.append(
-                    ConditionComplexity(
-                        line=node.start_point[0] + 1,
-                        operator_count=op_count,
-                        enclosing_construct=_enclosing_construct(node, lmap),
-                        flat_chain=len(op_kinds) == 1 and not negated,
-                    )
-                )
+            # Side-channel: does not affect ccn/cognitive (boolean operators
+            # are still tallied independently by the regular recursion below).
+            conditions.extend(_compound_condition(node, lmap))
+        elif node.id in bare_handler_ids:
+            # A bare ``on T { }`` handler branches and nests like a catch clause.
+            ccn_increment = nesting_increment = 1
         elif node.is_named and node.type in lmap.try_kinds:
             # TRY neither branches nor nests: each catch opens the level for
             # its own body, and the guarded and finally bodies stay at the
             # try's depth (Sonar's cognitive complexity spec).
-            pass
+            bare_handler_ids.update(_bare_on_handlers(node))
         elif node.is_named and node.type in lmap.switch_kinds:
             arm_ids = {c.id for c in _collect_case_children(node, lmap)}
             # Detect flat match: all arms are simple single-expression arms.
@@ -556,6 +543,51 @@ def _walk_function_body(
         block = _widened_block(deepest_node[0], body_node, lmap)
         deepest[:] = [block.start_point[0] + 1, block.end_point[0] + 1]
     return ccn, max_nesting, cognitive, bumps, conditions
+
+
+def _compound_condition(node: Node, lmap: LanguageNodeMap) -> list[ConditionComplexity]:
+    """The compound boolean ops in *node*'s condition, as one record or none."""
+    op_count = 0
+    op_kinds: set[str] = set()
+    negated = False
+    for sub in _condition_subtrees(node, lmap):
+        sub_count, sub_kinds, sub_negated = _count_boolean_ops_in_condition(sub, lmap)
+        op_count += sub_count
+        op_kinds |= sub_kinds
+        negated = negated or sub_negated
+    if op_count == 0:
+        return []
+    return [
+        ConditionComplexity(
+            line=node.start_point[0] + 1,
+            operator_count=op_count,
+            enclosing_construct=_enclosing_construct(node, lmap),
+            flat_chain=len(op_kinds) == 1 and not negated,
+        )
+    ]
+
+
+def _bare_on_handlers(try_node: Node) -> list[int]:
+    """Ids of the type node opening each Dart ``on T { }`` handler.
+
+    The grammar gives ``on T catch (e)`` and ``catch (e)`` a ``catch_clause``
+    but leaves a bare ``on T`` as loose tokens beside its block, so the walk
+    counts the type node in its place. Other grammars have no ``on`` token here.
+    """
+    out: list[int] = []
+    arm: Node | None = None
+    after_on = False
+    for child in try_node.children:
+        if child.type == "on":
+            after_on, arm = True, None
+        elif child.type == "catch_clause":
+            after_on, arm = False, None
+        elif after_on and arm is None and child.is_named:
+            arm = child
+        elif child.type == "block" and arm is not None:
+            out.append(arm.id)
+            after_on, arm = False, None
+    return out
 
 
 #: The smallest block named as the place to start flattening a function.
