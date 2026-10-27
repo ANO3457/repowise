@@ -53,6 +53,7 @@ wiki_style: comprehensive
 language: en
 enable_onboarding: true
 max_file_pages: 2000
+folder_coverage: ["src/core=1.0", "src/legacy=0.5"]
 exclude_patterns: [vendor/, "*.generated.*", proto/]
 distill: {enabled: true}
 mcp: {tools: ["+get_execution_flows", "-get_dead_code"]}
@@ -73,6 +74,7 @@ mcp: {tools: ["+get_execution_flows", "-get_dead_code"]}
 | `language` | `en` | Wiki output language: `en`, `ar`, `de`, `es`, `fr`, `hi`, `it`, `ja`, `ko`, `nl`, `pl`, `pt`, `ru`, `tr`, `zh`. |
 | `enable_onboarding` | `true` | First-run onboarding prompts (CLI and web). |
 | `max_file_pages` | unset | Most file pages per run, highest importance first; see [below](#max_file_pages). |
+| `folder_coverage` | `[]` | File-page floors per folder as `"GLOB=PCT"` strings; see [below](#folder_coverage). |
 | `forges.hosts` | `{}` | Self-managed git host to forge (`github`, `gitlab`, `azure`, `bitbucket`, `generic`); see [GIT_HOSTS.md](../start/GIT_HOSTS.md#self-managed-hosts). |
 
 Blocks, each with its own section: [`generation_context`](#grounded-generation-context),
@@ -122,6 +124,15 @@ Applies to documentation-generation calls on reasoning-capable chat models.
   `--max-file-pages N` sets it non-interactively. `update --full` and
   `generate` honour the recorded value.
 - File pages are rendered from structure, so a cap does not reduce model spend.
+
+### `folder_coverage`
+
+- `"src/core=1.0"` gives every eligible code file under `src/core` a file page
+  whatever its importance or the cap; `"src/legacy=0.5"` gives the top half.
+- A floor, not a cap: pinned files are added to the selection and never
+  displace a global pick, so the estimate rises with them.
+- `init --folder-coverage GLOB=PCT` (repeatable) sets it. Every run reads it,
+  and editing it re-renders the wiki on the next `update`.
 
 ### `wiki_style`
 
