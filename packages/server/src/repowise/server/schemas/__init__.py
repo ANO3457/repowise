@@ -11,6 +11,7 @@ import importlib
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from ._datetime import UTCDateTime
     from .architecture import (
         ArchEdgeResponse,
         ArchitectureViewResponse,
@@ -352,6 +353,7 @@ if TYPE_CHECKING:
 # Loaded on first access (PEP 562), so importing one model does not pay for
 # every submodule, one of which pulls in the whole dead-code analyzer.
 _EXPORTS: dict[str, tuple[str, ...]] = {
+    "_datetime": ("UTCDateTime",),
     "architecture": (
         "ArchEdgeResponse",
         "ArchitectureViewResponse",
@@ -910,6 +912,7 @@ __all__ = [
     "SymbolResponse",
     "TableView",
     "TransitiveEntry",
+    "UTCDateTime",
     "UnclusteredFiles",
     "UpdateMcpToolsRequest",
     "VersionResponse",
