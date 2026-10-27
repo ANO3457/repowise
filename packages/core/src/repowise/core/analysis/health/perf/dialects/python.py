@@ -443,14 +443,9 @@ class PythonPerfDialect(
         if method in _PY_LOCK_METHODS and self.callee_is_attribute(node):
             return "lock_in_loop"
         # ``lst.insert(0, x)`` shifts the whole list each pass: a literal ``0``, on a
-        # list not re-created per iteration and not a ``deque`` (O(1) at the front).
-        if (
-            method == "insert"
-            and self.callee_is_attribute(node)
-            and self._first_arg_is_zero(node)
-            and not self._receiver_reset_in_loop(node, root)
-            and not self._receiver_bound_to_deque(node, root)
-        ):
+        # list not re-created per iteration, not a ``deque`` (O(1) at the front) and
+        # not followed by an exit that ends the loop.
+        if method == "insert" and self._front_insert_repeats(node, root):
             return "list_insert_zero_in_loop"
         # ``pd.concat([acc, chunk])`` / ``pandas.concat(...)`` in a loop copies
         # the whole frame each pass -> O(n^2); collect a list and concat once.
@@ -494,6 +489,46 @@ class PythonPerfDialect(
                 continue  # imports do not nest further imports
             stack.extend(n.children)
         return False
+
+    def _front_insert_repeats(self, node: Node, root: str) -> bool:
+        if not (self.callee_is_attribute(node) and self._first_arg_is_zero(node)):
+            return False
+        return not (
+            self._receiver_reset_in_loop(node, root)
+            or self._receiver_bound_to_deque(node, root)
+            or self._loop_ends_after(node)
+        )
+
+    def _loop_ends_after(self, node: Node) -> bool:
+        """A ``return``/``raise`` (or, with one loop around *node*, a ``break``)
+        follows *node*'s statement in its block, so it runs once per call.
+        Ceiling: a flag-driven exit (``stop = True`` then ``if stop: break``) is
+        still reported."""
+        stmt = node
+        while stmt.parent is not None and stmt.parent.type != "block":
+            if stmt.type in self.scope_kinds:  # a lambda body runs elsewhere
+                return False
+            stmt = stmt.parent
+        loops, in_try = self._enclosing_loops(stmt)
+        if not loops:
+            return False
+        # A ``raise`` inside a ``try`` may be caught and the loop go on, and a
+        # ``break`` in a loop nest leaves only the inner loop.
+        exits = {"return_statement"} if in_try else {"return_statement", "raise_statement"}
+        if loops == 1:
+            exits.add("break_statement")
+        return self._exit_follows(
+            stmt, lambda s: s.type in exits, frozenset({"continue_statement"})
+        )
+
+    def _enclosing_loops(self, stmt: Node) -> tuple[int, bool]:
+        """Loops around *stmt* in its scope, and whether a ``try`` sits among them."""
+        loops, in_try, cur = 0, False, stmt.parent
+        while cur is not None and cur.type not in self.scope_kinds:
+            loops += cur.type in ("for_statement", "while_statement")
+            in_try = in_try or cur.type == "try_statement"
+            cur = cur.parent
+        return loops, in_try
 
     def _receiver_reset_in_loop(self, node: Node, name: str) -> bool:
         """True if the call's receiver ``name`` is re-assigned (reset to a fresh
