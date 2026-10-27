@@ -678,6 +678,26 @@ EXPORT_API const struct S *fn5(int a) { if (a) { return 0; } return 0; }
     assert expected <= {r.name for r in results}
 
 
+def test_cpp_export_macro_class_and_annotated_fields_are_measured(tmp_path):
+    # ``class API Big {`` used to lose the class and its first method, and
+    # ``int x_ GUARDED_BY(mu_);`` hid the field from cohesion.
+    source = b"""class LIB_API Big {
+ public:
+  void a() { x_ = 1; }
+  void b() { y_ = 2; }
+ private:
+  int x_ GUARDED_BY(mu_);
+  int y_ GUARDED_BY(mu_);
+};
+"""
+    _require_language("cpp")
+    p = tmp_path / "big.h"
+    p.write_bytes(source)
+    classes = {c.name: c for c in walk_file(str(p), "cpp", source).classes}
+    assert classes["Big"].method_count == 2
+    assert classes["Big"].field_count == 2
+
+
 def _names_by_line(tmp_path, language: str, source: bytes) -> dict[int, str]:
     p = tmp_path / ("unit.cpp" if language == "cpp" else "unit.c")
     p.write_bytes(source)
