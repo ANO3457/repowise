@@ -30,6 +30,7 @@ from ..concept_tree.naming import (
 )
 from ..models import member_structural_key, scc_page_slug
 from .scoring import (
+    is_test_spec,
     score_api_contract,
     score_file,
     score_infra,
@@ -346,9 +347,11 @@ def _passes_importance_floor(parsed: Any) -> bool:
 
     Tests are read off ``FileInfo.is_test``, the flag ingestion stamps once, so
     ``e2e-tests/`` and ``foo.spec.ts`` are caught exactly as everywhere else.
+    Test support (``conftest.py``, ``tests/helpers/``) passes: it holds the
+    harness conventions, not test cases.
     """
     fi = parsed.file_info
-    if fi.is_test:
+    if is_test_spec(fi):
         return False
     return fi.path.replace("\\", "/").rsplit("/", 1)[-1] != "__init__.py"
 
