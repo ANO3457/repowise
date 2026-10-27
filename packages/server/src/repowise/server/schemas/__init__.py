@@ -303,6 +303,7 @@ if TYPE_CHECKING:
         WorkspaceBreakingChange,
         WorkspaceBreakingChangesResponse,
         WorkspaceCoChangeEntry,
+        WorkspaceCoChangeEvidence,
         WorkspaceCoChangesResponse,
         WorkspaceCoChangeStructure,
         WorkspaceConformanceResponse,
@@ -612,6 +613,7 @@ _EXPORTS: dict[str, tuple[str, ...]] = {
         "WorkspaceBreakingChange",
         "WorkspaceBreakingChangesResponse",
         "WorkspaceCoChangeEntry",
+        "WorkspaceCoChangeEvidence",
         "WorkspaceCoChangesResponse",
         "WorkspaceCoChangeStructure",
         "WorkspaceConformanceResponse",
@@ -670,7 +672,6 @@ if not TYPE_CHECKING:
 
     def __dir__() -> list[str]:
         return sorted({*globals(), *__all__})
-
 
 __all__ = [
     "ActiveProviderSelection",
@@ -919,6 +920,7 @@ __all__ = [
     "WorkspaceBreakingChange",
     "WorkspaceBreakingChangesResponse",
     "WorkspaceCoChangeEntry",
+    "WorkspaceCoChangeEvidence",
     "WorkspaceCoChangeStructure",
     "WorkspaceCoChangesResponse",
     "WorkspaceConformanceResponse",
