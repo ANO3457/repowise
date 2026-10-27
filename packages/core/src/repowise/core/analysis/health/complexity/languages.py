@@ -577,6 +577,7 @@ _JAVA = LanguageNodeMap(
     function_kinds=frozenset({"method_declaration", "constructor_declaration"}),
     lambda_kinds=frozenset({"lambda_expression"}),
     branch_kinds=frozenset({"if_statement", "ternary_expression"}),
+    flat_ternary_kinds=frozenset({"ternary_expression"}),
     loop_kinds=frozenset(
         {
             "for_statement",
@@ -895,6 +896,7 @@ _DART = LanguageNodeMap(
     # ``if_element`` is the collection-literal ``if`` (``[if (x) y]``);
     # ``conditional_expression`` is the ternary.
     branch_kinds=frozenset({"if_statement", "conditional_expression", "if_element"}),
+    flat_ternary_kinds=frozenset({"conditional_expression"}),
     loop_kinds=frozenset({"for_statement", "while_statement", "do_statement", "for_element"}),
     try_kinds=frozenset({"try_statement"}),
     # A bare ``on FormatException {}`` arm without ``catch`` has no
@@ -934,6 +936,7 @@ _CPP = LanguageNodeMap(
     function_kinds=frozenset({"function_definition"}),
     lambda_kinds=frozenset({"lambda_expression"}),
     branch_kinds=frozenset({"if_statement", "conditional_expression"}),
+    flat_ternary_kinds=frozenset({"conditional_expression"}),
     loop_kinds=frozenset({"for_statement", "while_statement", "do_statement", "for_range_loop"}),
     foreach_kinds=frozenset({"for_range_loop"}),
     try_kinds=frozenset({"try_statement"}),
@@ -1001,6 +1004,7 @@ _C = LanguageNodeMap(
     function_kinds=frozenset({"function_definition"}),
     lambda_kinds=frozenset(),
     branch_kinds=frozenset({"if_statement", "conditional_expression"}),
+    flat_ternary_kinds=frozenset({"conditional_expression"}),
     loop_kinds=frozenset({"for_statement", "while_statement", "do_statement"}),
     try_kinds=frozenset(),
     catch_kinds=frozenset(),
@@ -1056,6 +1060,7 @@ _CSHARP = LanguageNodeMap(
     ),
     lambda_kinds=frozenset({"lambda_expression"}),
     branch_kinds=frozenset({"if_statement", "conditional_expression"}),
+    flat_ternary_kinds=frozenset({"conditional_expression"}),
     loop_kinds=frozenset({"for_statement", "while_statement", "foreach_statement", "do_statement"}),
     foreach_kinds=frozenset({"foreach_statement"}),
     try_kinds=frozenset({"try_statement"}),
@@ -1453,6 +1458,7 @@ _OBJC = LanguageNodeMap(
     # its complexity now that ``declaration`` is not a function kind.
     lambda_kinds=frozenset({"block_literal"}),
     branch_kinds=frozenset({"if_statement", "conditional_expression"}),
+    flat_ternary_kinds=frozenset({"conditional_expression"}),
     # Fast enumeration parses as ``for_statement``; there is no
     # ``for_in_statement`` node in this grammar.
     loop_kinds=frozenset({"for_statement", "while_statement", "do_statement"}),
@@ -1484,6 +1490,7 @@ _PHP = LanguageNodeMap(
     function_kinds=frozenset({"function_definition", "method_declaration"}),
     lambda_kinds=frozenset({"anonymous_function", "arrow_function"}),
     branch_kinds=frozenset({"if_statement", "else_if_clause", "conditional_expression"}),
+    flat_ternary_kinds=frozenset({"conditional_expression"}),
     loop_kinds=frozenset({"for_statement", "foreach_statement", "while_statement", "do_statement"}),
     foreach_kinds=frozenset({"foreach_statement"}),
     try_kinds=frozenset({"try_statement"}),

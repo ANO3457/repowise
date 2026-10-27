@@ -106,16 +106,14 @@ log = structlog.get_logger(__name__)
 # Not a licence to move a calibrated scoring weight — those are frozen
 # independently of this stamp.
 #
-# v43: the code-origin classifier moved for several path shapes: a nested
-# ``tools/`` folder is production (only a repo-root or engineering ``tools/``
-# stays tooling), Python ``_vendor/`` folders and Salesforce static-resource
-# libraries read as vendored, and prefixed migration folders under ``db/`` read
-# as migrations. Stored origins decide health and dead-code scope, so those
-# files re-score.
+# v44: ternary dispatch chains in Java, C, C++, C#, Dart, Objective-C and PHP
+# keep each decision but do not add nesting for their else-arms, matching
+# Python and JS/TS. Re-score stored metrics and invalidate cached walks so
+# old false nested-complexity findings do not survive the new language maps.
 #
 # Earlier bumps and their reasons: ``git log -S"HEALTH_ANALYZER_VERSION =" -p``
 # on this file.
-HEALTH_ANALYZER_VERSION = 43
+HEALTH_ANALYZER_VERSION = 44
 
 
 def _log_duplication_diagnostics(report: DuplicationReport) -> None:
