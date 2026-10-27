@@ -1071,6 +1071,37 @@ Anonymous usage telemetry is **on by default** (opt-out).
 | `REPOWISE_FORGE_HOSTS` | `host=forge` pairs, comma separated (`git.corp.com=gitlab,tfs.corp.com=azure`); wins over `forges.hosts` |
 | `REPOWISE_CHANGELOG` | Changelog source for the "what's new" check |
 | `REPOWISE_PARSE_WORKERS` | Indexing parse processes: default CPU count capped at 8, never above the files to parse. Each holds about 50 MB; above 8 is not measurably faster |
+| `REPOWISE_NO_SAVE_KEY` | Truthy: `init` does not save the provider API key to `.repowise/.env`, like `init --no-save-key`. Use it where credentials are injected at runtime and must not be written to disk |
+| `REPOWISE_MCP_NO_WATCHDOG` | `1`, `true` or `yes` turns off the parent-process watchdog in `repowise mcp --transport stdio`, which exits the server when the MCP client dies abnormally (crash, force-quit, killed terminal) |
+| `REPOWISE_INDEX_INFORMATION_FLOOR` | Minimum characters of substantive prose a wiki page needs to get a vector in the search index. Pages below it stay readable and linkable, they are only left out of semantic search. Default `0` (off) |
+
+### BLAS thread pool
+
+repowise caps the BLAS thread pool to 1 before numpy loads. An uncapped pool costs about 32 MB of memory per thread (about 750 MB on a 32-core machine) and does not speed up the sparse graph work repowise runs. Spawned worker processes inherit the cap through the environment.
+
+A value you set yourself always wins:
+
+```bash
+OPENBLAS_NUM_THREADS=4 repowise init   # 4 BLAS threads instead of 1
+```
+
+| Variable | Applies to | Default |
+|----------|-----------|---------|
+| `OPENBLAS_NUM_THREADS` | OpenBLAS | `1` unless set |
+| `MKL_NUM_THREADS` | Intel MKL | `1` unless set |
+| `NUMEXPR_NUM_THREADS` | NumExpr | `1` unless set |
+| `VECLIB_MAXIMUM_THREADS` | Apple Accelerate | `1` unless set |
+
+`OMP_NUM_THREADS` is not set: igraph's community detection uses OpenMP threads and is slower without them.
+
+### Cache integrity key
+
+repowise integrity-checks its on-disk caches with a machine-local key.
+
+| Variable | Description |
+|----------|-------------|
+| `REPOWISE_CACHE_HMAC_KEY` | Hex-encoded key (at least 32 hex characters, 16 bytes) used instead of the key file. For CI and tests where the home directory is ephemeral or shared |
+| `REPOWISE_CACHE_KEY_PATH` | Path to the key file. Default `$XDG_CONFIG_HOME/repowise/cache_hmac_key`, or `~/.config/repowise/cache_hmac_key` when `XDG_CONFIG_HOME` is unset |
 
 ## Exclude patterns
 
