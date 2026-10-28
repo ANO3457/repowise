@@ -77,7 +77,7 @@ def test_findings_come_from_the_run(no_probe):
     stood = reporting._stood_out(result, Path("/r"), reporting._top_hotspot(result))
 
     assert stood.health_score == 7.43
-    assert stood.health_mark == "warning"
+    assert stood.health_band == "good"
     assert (stood.lowest_file, stood.lowest_score) == ("scheduler/planner.py", 3.12)
     assert stood.dead_unreachable == 2
     # A whole file is review-only; the safe count is over every finding.
@@ -99,7 +99,7 @@ def test_too_little_analysed_keeps_the_score_and_drops_the_word():
     )
     finding = reporting._health_finding(result)
     assert finding["health_score"] == 9.1
-    assert finding["health_mark"] is None
+    assert finding["health_band"] is None
 
 
 def test_candidates_are_none_without_a_store(tmp_path):
@@ -222,7 +222,7 @@ def test_summary_carries_the_findings_and_the_model_command(tmp_path):
         next_steps=[("repowise serve", "tour"), ("repowise dead-code", "x")],
         stood_out=StoodOut(
             health_score=7.43,
-            health_mark="warning",
+            health_band="good",
             lowest_file="scheduler/planner.py",
             lowest_score=3.12,
             dead_unreachable=38,
@@ -237,7 +237,7 @@ def test_summary_carries_the_findings_and_the_model_command(tmp_path):
     assert summary["findings"] == {
         "health": {
             "score": 7.43,
-            "band": "warning",
+            "band": "good",
             "lowest_file": "scheduler/planner.py",
             "lowest_score": 3.12,
         },
