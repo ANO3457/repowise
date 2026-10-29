@@ -1529,6 +1529,15 @@ class TestSecretPrecision:
     def test_credential_shaped_values_still_fire(self, source: str) -> None:
         assert self._kinds(source) == {"hardcoded_secret"}
 
+    def test_windows_manifest_public_key_token_is_not_a_secret(self) -> None:
+        source = (
+            '<dependency><dependentAssembly>'
+            '<assemblyIdentity type="win32" name="Microsoft.Windows.Common-Controls" '
+            'version="6.0.0.0" processorArchitecture="*" publicKeyToken="6595b64144ccf1df" language="*"/>'
+            '</dependentAssembly></dependency>\n'
+        )
+        assert self._kinds(source) == set()
+
     def test_doctest_example_is_not_a_password(self) -> None:
         source = (
             "def mask(line):\n"
