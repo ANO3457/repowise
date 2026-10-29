@@ -22,6 +22,7 @@ import structlog
 
 from ..cohesion import cannot_close_cycle
 from ..models import SYMBOL_USE_EDGE_TYPES, TEMPORAL_EDGE_TYPES
+from ..symbol_use import SymbolUse, symbol_use_counts
 
 log = structlog.get_logger(__name__)
 
@@ -400,6 +401,13 @@ class MetricsMixin:
         )
         self._release_symbol_subgraph()
         return self._symbol_pagerank_cache
+
+    def symbol_uses(self) -> dict[str, SymbolUse]:
+        """Production callers per symbol (see :func:`symbol_use_counts`).
+
+        Uncached: one linear pass over the edges, read once per selection.
+        """
+        return symbol_use_counts(self.graph())
 
     def symbol_betweenness_centrality(self) -> dict[str, float]:
         """Return betweenness centrality for symbol nodes (cached)."""
