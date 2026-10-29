@@ -278,7 +278,6 @@ def detect_clones(
     del windows_by_grammar
 
     if cache is not None and cache_dir is not None:
-        all_paths = {pf.file_info.path for pf in parsed_list}
         _persist_pair_index(
             cache_dir,
             window_tokens,
@@ -287,7 +286,7 @@ def detect_clones(
             per_file_streams,
             per_file_hash,
             raw_pairs,
-            all_paths,
+            [pf.file_info.path for pf in parsed_list],
         )
 
     # Neither structure participates in merge/finalize/aggregation. Drop
@@ -619,10 +618,15 @@ def _detect_clones_incremental(
     """
     from collections import Counter
 
+    from .budget_cut import persisted_cut, splice_scope
+
     if not index.spliceable:
         return None
-
-    current = {pf.file_info.path: pf for pf in parsed_files}
+    scope = splice_scope(index, parsed_files, changed_files, persist)
+    if scope is None:
+        return None
+    read_files, cut = scope
+    current = {pf.file_info.path: pf for pf in read_files}
     old_files: dict[str, str] = index.files
     present = set(current) if persist else set(current) | set(old_files)
     # Files the previous run considered but gated out are not "new";
@@ -660,8 +664,10 @@ def _detect_clones_incremental(
     # 3. Window-budget equivalence: splicing is only valid when the full
     #    pipeline would not truncate either state.
     n_old_aff = sum(len(wt) for _s, wt in old_aff.values())
-    if index.total_windows - n_old_aff + len(new_windows) > lim.max_total_windows:
+    new_total = index.total_windows - n_old_aff + len(new_windows)
+    if not _budget_allows(cut, new_total, window_tokens, lim, cache, read_source):
         return None
+    diag.window_budget_hit = cut is not None
 
     # 4. Touched buckets = (grammar, hash) pairs present in moving windows.
     path_grammar = {
@@ -799,14 +805,15 @@ def _detect_clones_incremental(
             window_tokens=window_tokens,
             limits_key=limits_fingerprint(lim),
             files=new_files,
-            nonsurvivors=set(current) - set(new_files),
+            nonsurvivors={pf.file_info.path for pf in parsed_files} - set(new_files),
             paths=new_paths_table,
             pairs=[
                 (pid[key[0]], pid[key[1]], key[2], key[3], key[4], key[5], count)
                 for key, count in pair_counter.items()
                 if count > 0
             ],
-            total_windows=index.total_windows - n_old_aff + len(new_windows),
+            total_windows=new_total,
+            **persisted_cut(cut),
         ),
     )
     cache.save()
@@ -831,6 +838,27 @@ def _detect_clones_incremental(
         pairs_by_file=pairs_by_file,
         diagnostics=diagnostics,
     )
+
+
+def _budget_allows(
+    cut: Any,
+    new_total: int,
+    window_tokens: int,
+    lim: DuplicationLimits,
+    cache: Any,
+    read_source: Any | None,
+) -> bool:
+    """Whether a full run would collect the spliced window set, cut where it was."""
+    from .budget_cut import cut_holds
+
+    if cut is None:
+        return new_total <= lim.max_total_windows
+    stop_diag = DuplicationDiagnostics()
+    _s, _n, stop_windows, _h = _collect_windows(
+        [cut.stop], window_tokens, lim, stop_diag, cache, read_source
+    )
+    n_stop = sum(len(ws) for ws in stop_windows.values())
+    return cut_holds(new_total, n_stop, stop_diag.window_budget_hit, lim.max_total_windows)
 
 
 def _pair_key(p: ClonePair) -> _PairKey:
@@ -882,11 +910,15 @@ def _persist_pair_index(
     per_file_streams: dict[str, _Stream],
     per_file_hash: dict[str, str],
     raw_pairs: list[ClonePair],
-    all_paths: set[str],
+    paths: list[str],
 ) -> None:
-    """Persist the full run's raw pairs for the next incremental splice."""
+    """Persist the full run's raw pairs for the next incremental splice.
+
+    *paths* are every file the run was given, in collection order.
+    """
     from collections import Counter
 
+    from .budget_cut import cut_of_run
     from .pair_index import DuplicationPairIndex, limits_fingerprint, save_pair_index
 
     files = {p: per_file_hash[p] for p in per_file_streams if p in per_file_hash}
@@ -897,13 +929,14 @@ def _persist_pair_index(
     paths_table = sorted(files)
     pid = {p: i for i, p in enumerate(paths_table)}
     pair_counter = Counter(_pair_key(p) for p in raw_pairs)
+    budget_stop, unread = cut_of_run(paths, diag.files_considered, diag.window_budget_hit)
     save_pair_index(
         cache_dir,
         DuplicationPairIndex(
             window_tokens=window_tokens,
             limits_key=limits_fingerprint(lim),
             files=files,
-            nonsurvivors=all_paths - set(files),
+            nonsurvivors=set(paths) - set(files),
             paths=paths_table,
             pairs=[
                 (pid[key[0]], pid[key[1]], key[2], key[3], key[4], key[5], count)
@@ -912,6 +945,8 @@ def _persist_pair_index(
             total_windows=diag.total_windows,
             window_budget_hit=diag.window_budget_hit,
             timed_out=diag.timed_out,
+            budget_stop=budget_stop,
+            unread=unread,
         ),
     )
 
