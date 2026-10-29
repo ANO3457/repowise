@@ -249,9 +249,9 @@ def test_stood_out_names_the_four_findings():
     ],
 )
 def test_health_word_and_colour_follow_the_five_bands(score, word, style):
-    from repowise.core.analysis.health.grading import headline_band
+    from repowise.core.analysis.health.grading import band_for
 
-    stood = StoodOut(health_score=score, health_band=headline_band(score))
+    stood = StoodOut(health_score=score, health_band=band_for(score))
     console = Console(record=True, width=100, theme=THEME, color_system="truecolor")
     facts = FinishFacts(
         scope={}, files=1, symbols=1, languages="Python", graph_nodes=1, graph_edges=0,

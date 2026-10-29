@@ -180,7 +180,7 @@ def _complete(monkeypatch, tmp_path, *, index_only: bool, first_index: bool = Fa
 def test_keyless_completion_shows_findings_model_block_and_tour(monkeypatch, tmp_path, no_probe):
     completion, out, _ = _complete(monkeypatch, tmp_path, index_only=True)
     assert "What stood out" in out
-    assert "7.4/10 Warning" in out and "14 candidates to review" in out
+    assert "7.4/10 Good" in out and "14 candidates to review" in out
     assert "Add a model when you want more" in out
     assert completion.model_upgrade == ModelUpgrade("repowise generate")
     assert completion.steps[0][0] == "repowise serve"
