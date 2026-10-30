@@ -11,8 +11,11 @@ from repowise.server.mcp_server.tool_answer.confidence import (
     _grade_answer,
     stated_value_line,
 )
-from repowise.server.mcp_server.tool_answer.payload import _high_confidence_note
-from repowise.server.mcp_server.tool_answer.symbols import _names_nothing_in_code
+from repowise.server.mcp_server.tool_answer.payload import (
+    _held_at_medium_note,
+    _high_confidence_note,
+)
+from repowise.server.mcp_server.tool_answer.symbols import _names_nothing_in_code, _TopicGuard
 
 _TS = "core/ingestion/extractors/imports/ts_js.py"
 _TS_HITS = [
@@ -268,7 +271,7 @@ class _Guard:
     def __init__(self, written: set[str], unscanned: set[str] = frozenset()):
         self.names, self.unscanned = written, unscanned
 
-    async def written(self, token: str) -> bool | None:
+    async def written(self, token: str, scope: str | None = None) -> bool | None:
         return None if token in self.unscanned else token in self.names
 
 
@@ -284,3 +287,151 @@ def test_only_code_shaped_names_no_line_writes_are_absent() -> None:
     assert not absent("SSG")  # an acronym is prose often enough
     assert not absent("Client.get")
     assert not absent("BigRepoThing")  # the scan stopped short: unknown, not absent
+
+
+# --- markdown markup does not hide a hedge -----------------------------------
+
+_TREE_Q = "How does the FileTree component in packages/ui render nested folders?"
+_TREE_HITS = [
+    {"target_path": "packages/ui/src/graph/code-graph-tree.tsx", "score": 2.3,
+     "summary": "Outline tree of directories and files.",
+     "symbols": [{"name": "CodeGraphTree", "kind": "function"}]},
+    {"target_path": "packages/ui/src/zoom/types.ts", "score": 1.6},
+]
+
+
+def test_an_emphasised_admission_is_still_a_hedge() -> None:
+    answer = (
+        "## What the excerpts show\n\nThe retrieved material does **not include the "
+        "`FileTree` component** or its source body. The closest symbol is `CodeGraphTree`."
+    )
+    grade = _grade(_TREE_Q, answer, _TREE_HITS, dominance="ratio", ids={"FileTree"},
+                   unindexed_names={"FileTree"})
+    assert grade.hedged
+    assert grade.confidence == "low"
+
+
+def test_markup_inside_an_identifier_is_not_stripped() -> None:
+    # Only edge underscores go, so a snake_case name cannot turn into a phrase.
+    assert not _answer_is_hedged("`does_not_include_tests` filters the walk.", "What filters it?")
+
+
+# --- a scoped question's name nothing under the scope writes ------------------
+
+
+def _scanned_guard(rows: list[str], *, complete: bool = True) -> _TopicGuard:
+    guard = _TopicGuard(None, [], "", set())
+    guard._scans["FileTree"] = ([{"path": p, "line": 1, "text": "FileTree"} for p in rows], complete)
+    return guard
+
+
+def test_a_name_written_only_outside_the_scope_is_absent_in_it() -> None:
+    guard = _scanned_guard(["packages/server/symbols.py"])
+    assert asyncio.run(_names_nothing_in_code("FileTree", guard, "packages/ui/src"))
+    assert not asyncio.run(_names_nothing_in_code("FileTree", guard))
+
+
+def test_a_name_written_under_the_scope_is_not_absent() -> None:
+    inside = _scanned_guard(["packages/ui/src/tree/FileTree.tsx"])
+    assert not asyncio.run(_names_nothing_in_code("FileTree", inside, "packages/ui/src"))
+    # A sibling directory sharing the prefix is outside the scope.
+    sibling = _scanned_guard(["packages/ui/src-old/FileTree.tsx"])
+    assert asyncio.run(_names_nothing_in_code("FileTree", sibling, "packages/ui/src"))
+    # A scan that stopped short proves nothing.
+    partial = _scanned_guard(["packages/server/symbols.py"], complete=False)
+    assert not asyncio.run(_names_nothing_in_code("FileTree", partial, "packages/ui/src"))
+
+
+# --- agreement alone needs a strong top score ---------------------------------
+
+_CORS_Q = "How does the cors middleware handle a preflight OPTIONS request?"
+_CORS_A = "The `cors` middleware sets `Access-Control-Allow-Methods` and returns 204."
+
+
+def _cors_hits(top: float) -> list[dict]:
+    return [
+        {"target_path": "src/middleware/cors/index.ts", "score": top,
+         "summary": "cors middleware: preflight OPTIONS request handling.",
+         "symbols": [{"name": "cors", "kind": "function", "_matched": True}]},
+        {"target_path": "src/client/types.ts", "score": top - 0.03},
+    ]
+
+
+def test_agreement_on_a_weak_top_score_holds_at_medium_with_a_note() -> None:
+    grade = _grade(_CORS_Q, _CORS_A, _cors_hits(3.27), dominance="agreement")
+    assert grade.confidence == "medium"
+    assert grade.weak_agreement
+    assert "3.27" in _held_at_medium_note(grade)
+
+
+def test_agreement_on_a_strong_top_score_stays_high() -> None:
+    grade = _grade(_CORS_Q, _CORS_A, _cors_hits(4.2), dominance="agreement")
+    assert grade.confidence == "high"
+    assert grade.high_reason == "agreement"
+    assert not grade.weak_agreement
+
+
+def test_the_agreement_floor_leaves_other_dominance_alone() -> None:
+    grade = _grade(_CORS_Q, _CORS_A, _cors_hits(3.27), dominance="gap")
+    assert grade.confidence == "high"
+    assert not grade.weak_agreement
+
+
+def test_a_specific_gate_keeps_its_finding_under_weak_agreement() -> None:
+    hits = _cors_hits(3.27)
+    grade = _grade(_CORS_Q, _CORS_A, hits, dominance="agreement", ids={"cors"},
+                   split_names={"cors": ["src/middleware/cors/index.ts", "src/adapter/cors.ts"]})
+    assert grade.confidence == "medium"
+    assert grade.split_names
+    assert not grade.weak_agreement
+
+
+def test_a_file_cut_at_the_line_cap_leaves_the_word_scan_complete(tmp_path) -> None:
+    from repowise.server.mcp_server._line_hits import MAX_LINES_PER_FILE, word_scan
+
+    (tmp_path / "many.py").write_text("RowTree = 1\n" * (MAX_LINES_PER_FILE + 3), encoding="utf-8")
+    rows, complete = word_scan(tmp_path, "RowTree")
+    assert complete
+    assert {r["path"] for r in rows} == {"many.py"}
+
+
+def test_the_anchor_marks_a_name_absent_under_the_question_scope(tmp_path) -> None:
+    from repowise.server.mcp_server.tool_answer.symbols import _anchor_symbol_hits
+
+    class _NoRows:
+        async def execute(self, *a, **k):
+            class _R:
+                def scalars(self):
+                    return self
+
+                def all(self):
+                    return []
+
+            return _R()
+
+    (tmp_path / "server").mkdir()
+    (tmp_path / "ui").mkdir()
+    (tmp_path / "server" / "notes.py").write_text("# RowTree is an example\n", encoding="utf-8")
+    (tmp_path / "ui" / "tree.ts").write_text("export const outline = 1\n", encoding="utf-8")
+    q = "How does the RowTree component render nested folders?"
+    hits = [{"target_path": "ui/tree.ts", "score": 2.0}]
+
+    def absent(scope):
+        _, homonyms = asyncio.run(_anchor_symbol_hits(
+            _NoRows(), "r", {"RowTree"}, list(hits), repo_root=tmp_path, question=q, scope=scope
+        ))
+        return homonyms["absent"]
+
+    assert absent("ui") == ["RowTree"]
+    assert absent(None) == []  # written elsewhere in the repository
+
+
+def test_the_absent_name_note_names_the_missing_code() -> None:
+    from repowise.server.mcp_server.tool_answer.payload import _noted_unfounded_claim
+
+    grade = _grade(_TREE_Q, "Folders nest through `CodeGraphTree`.", _TREE_HITS,
+                   dominance="ratio", ids={"FileTree"}, unindexed_names={"FileTree"},
+                   absent_names=("FileTree",))
+    payload: dict = {}
+    assert _noted_unfounded_claim(payload, grade, [])
+    assert payload["note"].startswith("Nothing in the code searched defines or writes FileTree")
