@@ -13,6 +13,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from repowise.core.pipeline.index_persistence import (
+    IndexWrite,
+    apply_index_persistence,
+    index_persistence,
+    publish_index_persistence,
+)
 from repowise.core.pipeline.phase_timing import PhaseTimings, timed
 from repowise.core.pipeline.step_runner import PersistRun, Step, run_steps
 
@@ -45,6 +51,9 @@ class IncrementalPersist(PersistRun):
     reconcile_full_scope: bool = False
     full_generation_page_ids: set[str] | None = None
     vector_store: Any | None = None
+
+    traversed_paths: frozenset[str] | None = None
+    pruned_paths: set[str] = field(default_factory=set)
 
     session: Any = None
     repo_id: str = ""
@@ -82,6 +91,7 @@ async def reconcile_scope(ctx: IncrementalPersist) -> None:
             current_graph_paths,
             current_git_paths,
         )
+    ctx.traversed_paths = frozenset(current_graph_paths)
 
 
 async def reconcile_generation_scope(ctx: IncrementalPersist) -> None:
@@ -338,10 +348,28 @@ async def prune_deleted(ctx: IncrementalPersist) -> None:
             else {pf.file_info.path for pf in ctx.parsed_files or []}
         ),
         health_report=ctx.partial_health_report,
+        pruned=ctx.pruned_paths,
         skip=ctx.skip,
         log=ctx.log,
         degraded=ctx.degraded,
         timings=ctx.timings,
+    )
+
+
+async def persist_plugin_records(ctx: IncrementalPersist) -> None:
+    if not index_persistence.all():
+        return
+    await apply_index_persistence(
+        ctx.session,
+        ctx.repo_id,
+        IndexWrite(
+            "incremental",
+            ctx.parsed_files,
+            changed_paths=tuple(ctx.changed_paths),
+            deleted_paths=tuple(sorted(ctx.pruned_paths)),
+            traversed_paths=ctx.traversed_paths,
+            degraded=tuple(ctx.degraded or []),
+        ),
     )
 
 
@@ -410,6 +438,8 @@ INCREMENTAL_STEPS: tuple[Step, ...] = (
     Step("Decision purge", purge_retired_decisions),
     # Reports its own failures, one sub-step at a time.
     Step("Deleted-file prune", prune_deleted, guarded=False),
+    # Unguarded and last: plugins see the final rows, and a raise rolls back the update.
+    Step("Plugin records", persist_plugin_records, guarded=False),
 )
 
 
@@ -592,7 +622,7 @@ async def persist_incremental_index(
         full_generation_page_ids=full_generation_page_ids,
         vector_store=vector_store,
         log=log or _noop_log,
-        degraded=degraded,
+        degraded=[] if degraded is None else degraded,
         failed_steps=failed_steps,
         timings=timings,
     )
@@ -670,3 +700,5 @@ async def _write(ctx: IncrementalPersist) -> None:
         await ctx.engine.dispose()
         if timings is not None:
             timings.stop("persist")
+
+    await publish_index_persistence(ctx.repo_id, Path(ctx.repo_path))
