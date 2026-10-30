@@ -88,9 +88,22 @@ def read_checkout(repo_path, head: str | None = None) -> Checkout:
     ]
     roots = read_pytest_roots((p, t) for p, t in texts if Path(p).name in PYTEST_CONFIG_NAMES)
     at_head: list[frozenset[str]] = []
+    tracked_set = frozenset(tracked)
+    gone: list[frozenset[str] | None] = []
+
+    def on_disk(path: str) -> bool:
+        # A tracked file is present unless git lists it deleted: one git call
+        # instead of a stat per named test, thousands on a large suite.
+        # Ceiling: a sparse checkout's skipped files count as present.
+        if path in tracked_set:
+            if not gone:
+                gone.append(git_refs.deleted_paths(str(root)))
+            if gone[0] is not None:
+                return path not in gone[0]
+        return (root / path).is_file()
 
     def exists(path: str) -> bool:
-        if (root / path).is_file():
+        if on_disk(path):
             return True
         if head is None:
             return False
@@ -193,8 +206,36 @@ def plan_scopes(
             )
             namers = {**{f: n for f, n in namers.items() if f not in fixtures}, **readers}
     scopes = trigger_scopes(paths, checkout.tracked, namers, config)
+    if change.head is None:
+        scopes.update(_empty_new_files(change.files, checkout))
     routes = sorted({r for scope in scopes.values() for r in scope.routes} - set(paths))
     return Plan(namers, scopes, routes)
+
+
+#: Empty files whose presence alone still changes what runs: a package and a pytest scope.
+_PRESENCE_MATTERS = frozenset({"__init__.py", "conftest.py"})
+
+
+def _empty_new_files(paths: Collection[str], checkout: Checkout) -> dict[str, Any]:
+    """An untracked code file with no content needs no tests: it holds nothing to run.
+
+    Ceiling: only uncommitted work is read here, so a file committed empty
+    keeps its rule; reading it at the change's head is the upgrade.
+    """
+    from .selection_scopes import Scope
+    from .test_selection import EMPTY_NEW_FILE, NO_TESTS_NEEDED, is_code_file
+
+    tracked = set(checkout.tracked)
+    out: dict[str, Any] = {}
+    for path in paths:
+        if path in tracked or not is_code_file(path):
+            continue
+        if PurePosixPath(path).name in _PRESENCE_MATTERS:
+            continue
+        text = checkout.read(path)
+        if text is not None and not text.strip():
+            out[path] = Scope(EMPTY_NEW_FILE, NO_TESTS_NEEDED)
+    return out
 
 
 def _scan_texts(
@@ -246,8 +287,9 @@ async def collect(
     without them no conftest route is narrowed. *read_source* (``Checkout.read``)
     lets that narrowing read the modules a conftest takes names from.
     """
-    from ..persistence.crud import get_health_metrics, get_test_coverage_summary
+    from ..persistence.crud import get_test_coverage_summary
     from ..persistence.crud.analysis.coverage_map import map_is_truncated
+    from ..persistence.crud.analysis.health.metrics import health_file_paths
 
     out = empty_result(len(change.files) + len(change.deleted))
     if not out["changed_files"]:
@@ -262,7 +304,7 @@ async def collect(
 
     # Repo file keys back the filename-pattern fallback (same source the
     # aggregate coverage ingest resolves against).
-    repo_keys = {m.file_path for m in await get_health_metrics(session, repo_id)}
+    repo_keys = await health_file_paths(session, repo_id)
     # git runs off the event loop: a server shares it with other requests.
     routes = (
         []
