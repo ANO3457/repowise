@@ -617,7 +617,8 @@ def _high_confidence_note(grade: _Grade, tail: str) -> str:
 
 
 def _noted_unfounded_claim(payload: dict, grade: _Grade, fallback_targets: list[str]) -> bool:
-    """Write the note for a name nothing defines or a value nothing retrieved holds."""
+    """Write the note for a name nothing defines, a name defined in several files
+    the answer does not tell apart, or a value nothing retrieved holds."""
     if grade.absent_names:
         payload["note"] = (
             f"Nothing in this repository defines or writes {', '.join(grade.absent_names)}, "
@@ -625,7 +626,11 @@ def _noted_unfounded_claim(payload: dict, grade: _Grade, fallback_targets: list[
         )
         return True
     if not grade.ungrounded_values:
-        return False
+        # The split gate only demotes a high answer to medium; past that it says nothing.
+        split = grade.confidence == "medium" and grade.split_names
+        if split:
+            payload["note"] = _split_names_note(grade.split_names)
+        return bool(split)
     payload["note"] = (
         f"Value-grounding gate: the answer asserts {grade.ungrounded_values} "
         "but none of these appear in any retrieved excerpt — the "
@@ -639,6 +644,15 @@ def _noted_unfounded_claim(payload: dict, grade: _Grade, fallback_targets: list[
             f"{grade.ungrounded_values} against the live source."
         )
     return True
+
+
+def _split_names_note(split_names: dict[str, list[str]]) -> str:
+    """Name each definition of a question name the answer did not tell apart."""
+    parts = [f"{name} is defined in {', '.join(paths)}" for name, paths in sorted(split_names.items())]
+    return (
+        "Held at medium: " + "; ".join(parts) + ". The answer does not say which "
+        "definition it describes; check it is the one you need."
+    )
 
 
 async def _graded_payload(
