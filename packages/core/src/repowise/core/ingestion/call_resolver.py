@@ -134,6 +134,16 @@ _BARE_CALL_SKIPS_MEMBERS_LANGUAGES = frozenset(
     {"javascript", "typescript", "svelte", "vue", "astro"}
 )
 
+# Python, Go and Rust share the shape: a bare ``foo()`` inside a method never
+# means a member either (Python needs ``self.``, Go needs a receiver, Rust
+# needs ``Self::`` or ``self.``), so a top-level symbol of the name beats a
+# same-named member. Unlike the JS/TS set, this is top-level-*first*, not
+# top-level-only: a name with no top-level hit still falls back to the flat
+# table, because a class-scoped binding (notably a Python class-body alias,
+# which the symbol query excludes from top-level indexing) is the only
+# candidate there, and dropping it would lose the edge entirely.
+_BARE_CALL_TOP_LEVEL_FIRST_LANGUAGES = frozenset({"python", "go", "rust"})
+
 # Languages where a call the caller's own class cannot answer is looked for on
 # its ancestors, for an explicit ``self``/``this`` receiver and an implicit one.
 #
@@ -1718,11 +1728,17 @@ class CallResolver(
         # ``_file_symbols`` is flat and holds class members, but a JS/TS bare
         # call can only name a top-level binding: a same-named method must not
         # shadow an import (or hide a top-level function declared before it).
-        table = (
-            self._file_top_level
-            if self._language_of(file_path) in _BARE_CALL_SKIPS_MEMBERS_LANGUAGES
-            else self._file_symbols
-        )
+        # Python, Go and Rust share the member rule but keep the flat table as
+        # a fallback for names no top-level symbol claims (class-scoped
+        # bindings live there alone).
+        language = self._language_of(file_path)
+        if language in _BARE_CALL_SKIPS_MEMBERS_LANGUAGES or (
+            language in _BARE_CALL_TOP_LEVEL_FIRST_LANGUAGES
+            and call.target_name in self._file_top_level.get(file_path, {})
+        ):
+            table = self._file_top_level
+        else:
+            table = self._file_symbols
         callee_id = table.get(file_path, {}).get(call.target_name)
         if callee_id is None:
             return False, None
