@@ -246,7 +246,11 @@
         "caller_symbol_id": null,
         "line": 11,
         "argument_count": 1,
-        "receiver_call": null,
+        "receiver_call": {
+          "target_name": "status",
+          "receiver_name": "res",
+          "argument_count": 1
+        },
         "scope_name": null,
         "edge_type": "calls",
         "supplied_props": null,
@@ -310,7 +314,11 @@
         "caller_symbol_id": null,
         "line": 17,
         "argument_count": 1,
-        "receiver_call": null,
+        "receiver_call": {
+          "target_name": "status",
+          "receiver_name": "res",
+          "argument_count": 1
+        },
         "scope_name": null,
         "edge_type": "calls",
         "supplied_props": null,
@@ -374,7 +382,11 @@
         "caller_symbol_id": "lang_samples/javascript/route.js::validateRequest",
         "line": 29,
         "argument_count": 1,
-        "receiver_call": null,
+        "receiver_call": {
+          "target_name": "status",
+          "receiver_name": "res",
+          "argument_count": 1
+        },
         "scope_name": null,
         "edge_type": "calls",
         "supplied_props": null,
