@@ -446,8 +446,10 @@ _PY_TARGET_LISTS = (
 
 _PY_BINDINGS = (
     # `with ... as n`, `except ... as n`, `import x as n`.
-    re.compile(r"\bas\s+(?P<name>[a-z_]\w*)\b"),
-    re.compile(r"\b(?P<name>[a-z_]\w*)\s*:="),
+    # CapWords names bind too: a local `C = ...` shadows a module-level
+    # class of that name just as a lowercase local shadows a function.
+    re.compile(r"\bas\s+(?P<name>[A-Za-z_]\w*)\b"),
+    re.compile(r"\b(?P<name>[A-Za-z_]\w*)\s*:="),
 )
 
 # Every parameter of any `def` or `lambda` in the span, the enclosing one
@@ -460,11 +462,14 @@ _PY_PARAMETER_LISTS = (
     re.compile(r"\blambda\b(?P<lhs>[^:\n]*):"),
 )
 _PY_NAME = re.compile(r"(?<![\w.])[a-z_]\w*")
+# A Python parameter list binds CapWords names too (`def f(C): ...` shadows
+# a module-level class `C`); other languages keep reading `_PY_NAME` above.
+_PY_PARAMETER_NAME = re.compile(r"(?<![\w.])[A-Za-z_]\w*")
 
 # A plain `import` in a body is deliberately absent: it names the same module
 # symbol this scope resolves against (`from .tasks import ping`; `ping.delay()`).
 
-_PY_IDENTIFIER = re.compile(r"^[a-z_]\w*$")
+_PY_IDENTIFIER = re.compile(r"^[A-Za-z_]\w*$")
 
 # The TypeScript shapes that bind a name, typed or not. Every identifier in a
 # destructuring pattern counts, a renamed key included; a parameter's type
@@ -680,7 +685,7 @@ def scan_binding_positions(text: str, language: str) -> tuple[tuple[int, int, st
     else:
         found = _python_target_bindings(cleaned)
         found |= _named_bindings(_PY_BINDINGS, cleaned)
-        found |= _listed_bindings(_PY_PARAMETER_LISTS, _PY_NAME, cleaned)
+        found |= _listed_bindings(_PY_PARAMETER_LISTS, _PY_PARAMETER_NAME, cleaned)
     positions = set()
     for offset, name in found:
         line = bisect_right(starts, offset)

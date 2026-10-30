@@ -3064,3 +3064,48 @@ class TestJavaStaticImport:
             if src == "b/User.java::User::go"
         }
         assert callees == {"a/Ex.java::Sync::flush"}
+
+
+class TestPythonLocalShadowsModuleClass:
+    """A Python local of a module-level class's name hides that class.
+
+    Regression test for #4843: the binding scan only recorded lowercase
+    names, so `C = make()` inside a function never shadowed `class C`.
+    """
+
+    _EDGE = ("m.py::f", "m.py::C", 0.95, "same_file")
+
+    def _edges_for(self, tmp_path: Path, body: str) -> list[tuple[str, str, float, str]]:
+        parsed = _parse_all(
+            tmp_path,
+            {"m.py": ("python", "class C:\n    pass\n\n" + body)},
+        )
+        return _edges(parsed, tmp_path)
+
+    def test_plain_assignment_shadows_the_class(self, tmp_path: Path) -> None:
+        assert self._EDGE not in self._edges_for(
+            tmp_path, "def f():\n    C = make()\n    C()\n"
+        )
+
+    def test_for_target_shadows_the_class(self, tmp_path: Path) -> None:
+        assert self._EDGE not in self._edges_for(
+            tmp_path, "def f():\n    for C in xs:\n        C()\n"
+        )
+
+    def test_with_as_shadows_the_class(self, tmp_path: Path) -> None:
+        assert self._EDGE not in self._edges_for(
+            tmp_path, "def f():\n    with open('x') as C:\n        C()\n"
+        )
+
+    def test_parameter_shadows_the_class(self, tmp_path: Path) -> None:
+        assert self._EDGE not in self._edges_for(tmp_path, "def f(C):\n    C()\n")
+
+    def test_binding_in_another_function_does_not_shadow(
+        self, tmp_path: Path
+    ) -> None:
+        assert self._EDGE in self._edges_for(
+            tmp_path, "def g():\n    C = make()\n\ndef f():\n    C()\n"
+        )
+
+    def test_no_local_binding_keeps_the_edge(self, tmp_path: Path) -> None:
+        assert self._EDGE in self._edges_for(tmp_path, "def f():\n    C()\n")
