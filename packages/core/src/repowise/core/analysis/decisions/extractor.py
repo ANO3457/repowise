@@ -191,7 +191,9 @@ def _infer_tags(text: str) -> list[str]:
     ]
 
 
-def _snippet_for(decision: ExtractedDecision, batch: Sequence[tuple[str, str]]) -> tuple[str, str]:
+def _snippet_for(
+    decision: ExtractedDecision, batch: Sequence[tuple[str, str]]
+) -> tuple[str, str]:
     """The ``(file, prose)`` a comment decision came from, by file stem in its text.
 
     Best effort: the batch's first snippet when no stem matches.
@@ -704,7 +706,9 @@ class DecisionExtractor:
 
         if self._graph is None:
             return []
-        return scan_conventions(self._graph, self._parsed_files, self._source_map, self._repo_path)
+        return scan_conventions(
+            self._graph, self._parsed_files, self._source_map, self._repo_path
+        )
 
     def _top_central_files(self, n: int) -> list[str]:
         """Top-*n* file nodes by centrality (existing on disk).
@@ -725,7 +729,6 @@ class DecisionExtractor:
             if p.is_file() and p.suffix.lower() not in _BINARY_EXTENSIONS:
                 out.append(node)
         return out
-
     # ------------------------------------------------------------------
     # Anti-hallucination substring gate
     # ------------------------------------------------------------------
