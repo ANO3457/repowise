@@ -105,7 +105,10 @@ After the dialects, `code_api.py` adds published-package contracts,
 `merge_openapi_providers` folds an OpenAPI operation into the code route it
 describes, `bind_symbol_ids` binds each contract to a symbol in the repo's index,
 and `network_probe.count_unrecognised_call_files` counts the files that call out
-with no consumer contract read from them.
+with no consumer contract read from them. It runs again over `MESSAGE_PROBE_ROWS`
+for files on a messaging SDK with no topic contract, kept apart from the HTTP
+figure. A topic dialect that locates a call but cannot settle its name records it
+with `ScanContext.note_unresolved`, summed into `topic_names_unresolved`.
 
 ### Matching
 
@@ -134,7 +137,9 @@ links are appended after it.
    and gRPC service wildcards included. Strategy `exact_id`, `pattern_matched` for a
    pattern subscription, `service_mapped` when the provider sits in the consumer's
    resolved target. A target the map placed does not fall back to another repo that
-   serves the same path (`common.prefer_target_repo`).
+   serves the same path (`common.prefer_target_repo`). An HTTP or gRPC call whose id
+   two or more repos serve, with nothing placing it in one, links to none of them
+   (`MatchState.refuse`, `meta['ambiguous_provider']`); the HTTP passes keep that rule.
    A package-less gRPC stub id (`grpc::CurrencyService/*`) meets the package-qualified
    proto id (`grpc::shop.CurrencyService/Convert`) on the service's last segment. A proto
    declared in 2+ repos is served only by the repo that registers the service in code
@@ -178,7 +183,7 @@ both ways).
 
 | Consumer | Reads | Output |
 |----------|-------|--------|
-| `cycles.detect_cycles` | `adjacency()` | Cycles with `leg_kinds` per leg and `async_legs`; an event leg still closes a cycle; capped at `MAX_CYCLES` |
+| `cycles.detect_cycles` | `adjacency()` | Cycles with `leg_kinds` per leg and `async_legs`; an event leg still closes a cycle; capped at `MAX_CYCLES`; enumeration stops at `MAX_ENUMERATED_CYCLES`, then the total is a floor (`total_capped`) and the listed cycles come from a length-bounded pass (up to `MAX_CYCLE_LENGTH`) |
 | `architecture_metrics.compute_architecture_metrics` | `adjacency()`, `detect_cycles` | Propagation cost, core, roles, 1-10 score |
 | `conformance.build_conformance_report` | Structural edges, declared rules | Violations, cycles, `cycles_determined` |
 | `blast_radius.cross_repo_blast_radius` | `adjacency(impact=True)`, co-change at `BEHAVIORAL_EDGE_WEIGHT` | Impacted services by distance, `undetermined_targets` |
@@ -237,7 +242,7 @@ Everything lives in `.repowise-workspace/`:
 | `conformance.json` | Violations, cycles, `evidence` | |
 | `analysis_config.json` | The `contracts:` and `conformance:` settings the last analysis ran with | `WorkspaceConfig.analysis_fingerprint()` |
 | `member_refresh.json` | One digest per member repo | `update_cmd/member_refresh.py::member_fingerprint` |
-| `workspace.db` | Path and symbol lookup, components, recent changes, health, freshness | Each repo's `state.json`; safe to delete |
+| `workspace.db` | Path and symbol lookup, components, recent changes, health, freshness, the per-repo figures `GET /api/workspace` and `/graph` serve | Each repo's `state.json`; the figures also by `wiki.db` stat, read live when it moved; safe to delete |
 
 `member_refresh.py` lives in `packages/cli/src/repowise/cli/commands/update_cmd/`.
 Each repo's own `wiki.db` also carries a schema stamp in `PRAGMA user_version`
@@ -421,7 +426,10 @@ add its case to `test_graph_evidence.py`.
 
 ## Limits
 
-- Ruby, VB and SQL files have no comment mask, so a commented-out match there is
+- Only Python, JS/TS, Java, Kotlin, Go, C#, Rust, PHP, Apex, Proto and
+  `.prisma` files have a comment mask (see [`_SLASH_COMMENT_SUFFIXES` and
+  `_comment_mask`](../../../packages/core/src/repowise/core/workspace/extractors/base.py));
+  every other suffix is read as written, so a commented-out match there is
   read. A Python docstring example is read, because the mask keeps strings.
 - A gate is a substring test: it keeps a dialect off files it can find nothing in,
   not off every file that mentions its token.
