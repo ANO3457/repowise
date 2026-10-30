@@ -979,6 +979,28 @@ class LanguageStrategiesMixin:
         type_id, origin, confidence = found
         return self._csharp_type_call(type_id, caller_id, call, origin, confidence)
 
+    def _csharp_constructed_type_is_ambiguous(self, file_path: str, call: CallSite) -> bool:
+        """Whether ``new Name<T>(..)`` sees multiple types at its first lookup level."""
+        name = call.target_name
+        if call.receiver_name or name not in self._csharp_type_names:
+            return False
+        arity = self._constructed_arity(file_path, call)
+        if arity is None:
+            return False
+        aliases, levels = self._csharp_lookup(file_path)
+        if name in aliases:
+            return False
+        types = [
+            (namespace, type_id)
+            for namespace, type_id, type_arity in self._csharp_constructible_types(name)
+            if type_arity == arity
+        ]
+        for level, _origin, _confidence in levels:
+            visible = [type_id for namespace, type_id in types if namespace in level]
+            if visible:
+                return len(visible) > 1
+        return False
+
     def _constructed_arity(self, file_path: str, call: CallSite) -> int | None:
         """How many type arguments *call*'s line writes after ``new Name``, None for no ``new``.
 

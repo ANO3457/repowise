@@ -1675,6 +1675,10 @@ class CallResolver(
         # (``import java.io.IOException``) binds the name just as surely.
         if not declared or target_name in self._library_imported_names(file_path):
             return None
+        if self._language_of(file_path) == "csharp" and self._csharp_constructed_type_is_ambiguous(
+            file_path, call
+        ):
+            return None
         return (
             self._named_import_call(file_path, call, caller_id, binding)
             or self._merged_import_call(file_path, call, caller_id)

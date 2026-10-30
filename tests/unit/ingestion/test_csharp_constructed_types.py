@@ -18,6 +18,8 @@ from repowise.core.ingestion import ASTParser, FileTraverser, GraphBuilder
 R_IN_AB = "namespace A.B;\npublic class R\n{\n    public R(int n) { }\n}\n"
 R_IN_AD = "namespace A.D;\npublic class R\n{\n    public R(int n) { }\n}\n"
 CALLER = "namespace A;\nclass C\n{\n    void M()\n    {\n        var r = new R(1);\n    }\n}\n"
+USES_AB_DIRECT = "using A.B;\n" + CALLER
+USES_AB_AND_AD = "using A.B;\nusing A.D;\n" + CALLER
 USES_AB = '<Project Sdk="Microsoft.NET.Sdk">\n  <ItemGroup>\n    <Using Include="A.B" />\n  </ItemGroup>\n</Project>\n'
 
 
@@ -42,6 +44,10 @@ def _calls_from_m(
 
 
 class TestOneVisibleType:
+    def test_one_direct_using_keeps_the_constructor_edge(self, tmp_path: Path) -> None:
+        files = {"R.cs": R_IN_AB, "C.cs": USES_AB_DIRECT}
+        assert _calls_from_m(tmp_path, files) == {("R.cs::R::R", "import_merged")}
+
     def test_a_parent_namespace_sees_its_child_s_type_unique_in_the_repo(
         self, tmp_path: Path
     ) -> None:
@@ -121,6 +127,10 @@ class TestOneVisibleType:
 
 
 class TestRefusals:
+    def test_two_direct_usings_with_the_same_type_name_are_ambiguous(self, tmp_path: Path) -> None:
+        files = {"R.cs": R_IN_AB, "R2.cs": R_IN_AD, "C.cs": USES_AB_AND_AD}
+        assert _calls_from_m(tmp_path, files) == set()
+
     def test_two_types_of_the_name_and_no_using(self, tmp_path: Path) -> None:
         files = {"R.cs": R_IN_AB, "R2.cs": R_IN_AD, "C.cs": CALLER}
         assert _calls_from_m(tmp_path, files) == set()
