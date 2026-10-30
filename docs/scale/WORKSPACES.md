@@ -621,6 +621,8 @@ Add these to your `.gitignore`:
 
 The workspace config and data are local: they can reference absolute paths and contain generated analysis that should be rebuilt per-machine.
 
+When the workspace folder is a git repo or sits inside one, `repowise init .` adds `.repowise-workspace.yaml` and `.repowise-workspace/` (anchored to the folder) to that repo's `.git/info/exclude`, so `git status` stays clean without a shared `.gitignore` change. A path your `.gitignore` already covers is left alone. To share conformance rules with CI, commit the config once with `git add -f .repowise-workspace.yaml`; git then tracks it despite the exclude line.
+
 ---
 
 ## FAQ
