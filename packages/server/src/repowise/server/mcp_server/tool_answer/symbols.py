@@ -18,7 +18,9 @@ from typing import Any
 from sqlalchemy import select
 
 from repowise.core.persistence.models import WikiSymbol
+from repowise.core.support_paths import is_doc_or_config_path
 from repowise.core.test_paths import is_test_related_path
+from repowise.server.mcp_server._helpers import read_repo_file_text
 from repowise.server.mcp_server._line_hits import production_only, word_scan
 from repowise.server.mcp_server._query_shape import (
     _WORD_CHAIN_RE,
@@ -380,12 +382,14 @@ class _TopicGuard:
         return production_only(rows)
 
     async def written(self, token: str, scope: str | None = None) -> bool | None:
-        """Whether any file (under *scope*, if given) writes *token*; None when
-        the scan stopped short."""
+        """Whether any file (under *scope*, if given) writes *token* as code;
+        None when the scan stopped short. See :func:`_writes_as_code`."""
         rows, complete = await self._scan(token)
         if scope:
             rows = [r for r in rows if f"{r['path']}/".startswith(f"{scope}/")]
-        return True if rows else (False if complete else None)
+        if rows and await asyncio.to_thread(_writes_as_code, self.root, rows, token):
+            return True
+        return False if complete else None
 
     async def trusts(self, token: str, row) -> bool:
         # A plain capitalised word (``Gson``, ``Client``) is also prose, often the
@@ -401,6 +405,67 @@ class _TopicGuard:
         stem = row.file_path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
         owner = f"{stem} {row.parent_name or ''} {row.name or ''}"
         return bool(self.topic_stems & _text_stems(owner))
+
+
+# A source line that is all comment, or opens a docstring. A bare ``*`` is left
+# out (``*ptr = x``; block comment bodies are masked), and ``#`` counts only
+# where it starts a comment: it is code in ``#define``, ``#[derive]``, ``#field``.
+_COMMENT_OR_DOC_START_RE = re.compile(r"""(?://|/\*|[rRbBuUfF]{0,2}(?:\"\"\"|'''))""")
+_HASH_COMMENT_SUFFIXES = frozenset({".py", ".pyi", ".rb", ".sh", ".bash", ".pl", ".r", ".ex", ".exs"})
+# A quoted string on one line, for test lines (see _writes_as_code). Single
+# quotes only where they delimit strings: elsewhere they are chars or lifetimes.
+_DOUBLE_QUOTED_RE = re.compile(r""""(?:\\.|[^"\\])*"|`[^`]*`""")
+_SINGLE_QUOTED_RE = re.compile(r"""'(?:\\.|[^'\\])*'""")
+_SINGLE_QUOTE_STRING_SUFFIXES = _HASH_COMMENT_SUFFIXES | {
+    ".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".php"
+}
+
+
+def _writes_as_code(root: Path | None, rows: list[dict], token: str) -> bool:
+    """Does any scanned row's file write *token* as code, not in a comment or docstring?
+
+    A test line counts only when the name sits outside its strings: a question
+    or fixture text naming the name is not code that has it. Doc and config
+    files count as before, and so does a file that cannot be read, since it
+    proves nothing. Ceilings: a trailing comment after code still counts, and
+    a multi-line non-doc string (SQL in triple quotes) reads as a docstring.
+    """
+    word = re.compile(rf"(?<![\w$]){re.escape(token)}(?![\w$])")
+    paths = dict.fromkeys(r["path"] for r in rows)
+    return any(_file_writes_as_code(root, path, word) for path in paths)
+
+
+def _file_writes_as_code(root: Path | None, path: str, word: re.Pattern) -> bool:
+    """:func:`_writes_as_code` for one file, over every line of it: the scan
+    cuts a file at a per-file line cap, and a write may sit past the cut."""
+    text = None if is_doc_or_config_path(path) else read_repo_file_text(root, path)
+    if text is None:
+        return True
+    lines = text.splitlines()
+    masked = _string_masked_lines(tuple(lines), backticks=False).all
+    suffix = Path(path).suffix.lower()
+    hash_comments = suffix in _HASH_COMMENT_SUFFIXES
+    test = is_test_related_path(path)
+    for n, line in enumerate(lines, 1):
+        if n in masked or not word.search(line) or _is_comment_line(line.lstrip(), hash_comments):
+            continue
+        if not test or word.search(_unquoted(line, suffix)):
+            return True
+    return False
+
+
+def _is_comment_line(stripped: str, hash_comments: bool) -> bool:
+    if _COMMENT_OR_DOC_START_RE.match(stripped):
+        return True
+    return hash_comments and stripped.startswith("#")
+
+
+def _unquoted(line: str, suffix: str) -> str:
+    """*line* with its one-line strings blanked."""
+    line = _DOUBLE_QUOTED_RE.sub(" ", line)
+    if suffix in _SINGLE_QUOTE_STRING_SUFFIXES:
+        line = _SINGLE_QUOTED_RE.sub(" ", line)
+    return line
 
 
 async def _absent_names(
