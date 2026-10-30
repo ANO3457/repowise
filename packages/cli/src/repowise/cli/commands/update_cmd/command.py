@@ -1314,6 +1314,11 @@ def _rebuild_index(run: UpdateRun) -> None:
         git_summary_sink=run.full_git_summaries,
         timings=run.timings,
     )
+    decision = getattr(run.graph_builder, "incremental_graph_decision", None)
+    if decision is not None:
+        # Persist the selected path and its reason alongside this run's phase
+        # timings so a fallback is visible after the console output is gone.
+        run.state["graph_update"] = decision
 
 
 def _working_tree_only(run: UpdateRun) -> bool:
