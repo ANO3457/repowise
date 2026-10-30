@@ -161,6 +161,19 @@ class TestRefusals:
         widget = R_IN_AB.replace("class R", "class Widget").replace("public R(", "public Widget(")
         assert _calls_from_m(tmp_path, {"Impl.cs": widget, "C.cs": caller}) == set()
 
+    def test_a_using_alias_does_not_stem_match_a_repo_type_of_the_alias_name(
+        self, tmp_path: Path
+    ) -> None:
+        """``using R = X.Other;`` names an external type, so ``R.cs`` is not imported."""
+        caller = "using R = X.Other;\n" + CALLER
+        assert _calls_from_m(tmp_path, {"R.cs": R_IN_AB, "C.cs": caller}) == set()
+
+    def test_a_using_alias_of_a_bare_name_does_not_stem_match_the_alias(
+        self, tmp_path: Path
+    ) -> None:
+        caller = "using R = Other;\n" + CALLER
+        assert _calls_from_m(tmp_path, {"R.cs": R_IN_AB, "C.cs": caller}) == set()
+
     def test_a_bcl_name_with_one_repo_declaration_is_not_taken(self, tmp_path: Path) -> None:
         """``new List(1)`` with no ``using`` of the repo's namespace may mean the BCL type."""
         repo_list = R_IN_AB.replace("class R", "class List").replace("public R(", "public List(")
@@ -176,3 +189,10 @@ class TestRefusals:
         assert _calls_from_m(tmp_path, {"Pair.cs": pair, "C.cs": caller}) == {
             ("Pair.cs::Pair`2::Pair", "global_unique")
         }
+
+
+class TestAliasOfRepoType:
+    def test_a_using_alias_of_the_repo_type_still_binds(self, tmp_path: Path) -> None:
+        caller = "using R = A.B.R;\n" + CALLER
+        calls = _calls_from_m(tmp_path, {"R.cs": R_IN_AB, "C.cs": caller})
+        assert any(callee == "R.cs::R::R" for callee, _ in calls)

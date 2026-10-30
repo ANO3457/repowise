@@ -2294,7 +2294,7 @@ class TestModuleAliasReachesTopLevelOnly:
                 ),
             },
         )
-        _link_imports(parsed, {"Caller.cs": {"S": "Shapes.cs"}})
+        _link_imports(parsed, {"Caller.cs": {"N.Shape": "Shapes.cs"}})
         import_targets = {"Caller.cs": {"Shapes.cs"}, "Shapes.cs": set()}
         assert (
             "Caller.cs::Caller::Run",
