@@ -227,19 +227,78 @@ def snippet_around(content: str, query: str, length: int = _SNIPPET_LEN) -> str:
 
     lowered = content.lower()
     position = -1
+    matched_len = 0
     for term in _meaningful_terms(query):
         found = lowered.find(term)
         if found != -1 and (position == -1 or found < position):
             position = found
+            matched_len = len(term)
     if position == -1:
-        return content[:length].rstrip()
+        end = min(length, len(content))
+        end = _snap_cut(content, end, max_chars=10, min_pos=1, max_pos=length)
+        return content[:end].rstrip()
 
     # Centre the window, then slide it back inside the page rather than
     # letting it run off an edge: a match in the first or last few characters
     # would otherwise return a window shorter than the budget for no reason.
     start = max(0, position - length // 2)
     start = min(start, max(0, len(content) - length))
-    return content[start : start + length].strip()
+    end = start + length
+
+    start = _snap_cut(content, start, max_chars=10, min_pos=0, max_pos=position)
+    end = _snap_cut(
+        content,
+        end,
+        max_chars=10,
+        min_pos=position + matched_len,
+        max_pos=start + length,
+    )
+    result = content[start:end].strip()
+    return result if result else content[:length].strip()
+
+
+def _snap_cut(
+    content: str,
+    cut: int,
+    max_chars: int = 10,
+    min_pos: int = 0,
+    max_pos: int | None = None,
+) -> int:
+    """Move *cut* to the nearest whitespace within *max_chars* if inside a word."""
+    if max_pos is None:
+        max_pos = len(content)
+    if cut <= 0 or cut >= len(content):
+        return cut
+    if content[cut - 1].isspace() or content[cut].isspace():
+        return cut
+
+    left_ws = None
+    for i in range(1, max_chars + 1):
+        idx = cut - i
+        if idx < min_pos:
+            break
+        if content[idx].isspace():
+            left_ws = idx
+            break
+
+    right_ws = None
+    for i in range(1, max_chars + 1):
+        idx = cut + i
+        if idx > max_pos:
+            break
+        if content[idx].isspace():
+            right_ws = idx
+            break
+
+    if left_ws is not None and right_ws is not None:
+        if (cut - left_ws) <= (right_ws - cut):
+            return left_ws
+        return right_ws
+    if left_ws is not None:
+        return left_ws
+    if right_ws is not None:
+        return right_ws
+    return cut
 
 
 def strip_leading_headings(text: str) -> str:
