@@ -121,8 +121,13 @@ _JAVA_ANY_TYPE = r"[\w$]+(?:\.[\w$]+)*(?:<[^;{}()]*>)?(?:\[\])*(?:\.\.\.)?"
 _JAVA_ANY_DECLARATION = re.compile(
     rf"(?<![\w.@$])(?P<type>{_JAVA_ANY_TYPE})\s+(?P<name>[\w$]+)\s*(?=[=;,):])"
 )
-# ``in``: ``foreach (var x in Items)`` declares no ``Items``.
-_NOT_A_TYPE = frozenset({"return", "throw", "new", "else", "case", "yield", "assert", "in"})
+# ``in``: ``foreach (var x in Items)`` declares no ``Items``. ``is``, ``as``
+# and ``instanceof``: ``o is Engine`` and ``o as Motor`` test or cast a type,
+# they declare no ``Engine`` or ``Motor`` (``o is Engine e`` still declares
+# ``e``, whose name follows the type).
+_NOT_A_TYPE = frozenset(
+    {"return", "throw", "new", "else", "case", "yield", "assert", "in", "is", "as", "instanceof"}
+)
 
 
 # Languages whose grammar mints ``a.b.c.m()`` with the dotted path as its
