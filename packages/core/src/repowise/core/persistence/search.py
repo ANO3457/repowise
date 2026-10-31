@@ -149,7 +149,9 @@ async def _stored_vocabulary(conn: Any, page_ids: Sequence[str]) -> dict[str, st
 # ``NOT EXISTS`` rather than ``NOT IN``: the subquery's column is a primary key
 # and can never be NULL today, but ``NOT IN`` returns no rows at all the day one
 # is, which would turn this into a silent no-op instead of a visible failure.
-_ORPHAN_PREDICATE = "NOT EXISTS (SELECT 1 FROM wiki_pages p WHERE p.id = page_fts.page_id)"
+_ORPHAN_PREDICATE = (
+    "NOT EXISTS (SELECT 1 FROM wiki_pages p WHERE p.id = page_fts.page_id)"
+)
 _ORPHAN_COUNT_SQL = f"SELECT count(*) FROM page_fts WHERE {_ORPHAN_PREDICATE}"
 _ORPHAN_DELETE_SQL = f"DELETE FROM page_fts WHERE {_ORPHAN_PREDICATE}"
 
@@ -203,6 +205,15 @@ def _pg_term(term: str) -> str:
     return f"{term}:*" if len(term) >= _PREFIX_MIN_CHARS else term
 
 
+def _first_match(lowered: str, query: str) -> tuple[int, int]:
+    position, matched_len = -1, 0
+    for term in _meaningful_terms(query):
+        found = lowered.find(term)
+        if found != -1 and (position == -1 or found < position):
+            position, matched_len = found, len(term)
+    return position, matched_len
+
+
 def snippet_around(content: str, query: str, length: int = _SNIPPET_LEN) -> str:
     """A window of *content* centred on the first term of *query* it carries.
 
@@ -223,89 +234,64 @@ def snippet_around(content: str, query: str, length: int = _SNIPPET_LEN) -> str:
     if not content:
         return ""
 
-    lowered = content.lower()
-    position = -1
-    matched_len = 0
-    for term in _meaningful_terms(query):
-        found = lowered.find(term)
-        if found != -1 and (position == -1 or found < position):
-            position = found
-            matched_len = len(term)
+    position, matched_len = _first_match(content.lower(), query)
     if position == -1:
         end = min(length, len(content))
-        end = _snap_cut(content, end, max_chars=10, min_pos=1, max_pos=min(length, len(content)))
-        if end > length:
-            end = length
-        return content[:end].rstrip()
+        end = _snap_cut(content, end, min_pos=1, max_pos=end)
+        return content[: min(end, length)].rstrip()
 
     # Centre the window, then slide it back inside the page rather than
     # letting it run off an edge: a match in the first or last few characters
     # would otherwise return a window shorter than the budget for no reason.
     start = max(0, position - length // 2)
     start = min(start, max(0, len(content) - length))
+    min_start = max(0, len(content) - length, position - length + matched_len)
     start = _snap_cut(
         content,
         start,
-        max_chars=10,
-        min_pos=max(0, position - length + matched_len),
+        min_pos=min_start,
         max_pos=position,
     )
     end = min(len(content), start + length)
     end = _snap_cut(
         content,
         end,
-        max_chars=10,
         min_pos=position + matched_len,
-        max_pos=min(len(content), start + length),
+        max_pos=end,
     )
-    if end - start > length:
-        end = start + length
-    result = content[start:end].strip()
-    return result if result else content[:length].strip()
+    return content[start:end].strip() or content[:length].strip()
+
+
+_SNAP_MAX_CHARS = 10
+
+
+def _scan_boundary(content: str, cut: int, step: int, bound: int) -> int | None:
+    stop = max(bound, cut - _SNAP_MAX_CHARS) if step < 0 else min(bound, cut + _SNAP_MAX_CHARS)
+    for pos in range(cut + step, stop + step, step):
+        if content[pos].isspace():
+            return pos
+    return None
 
 
 def _snap_cut(
     content: str,
     cut: int,
-    max_chars: int = 10,
     min_pos: int = 0,
     max_pos: int | None = None,
 ) -> int:
-    """Move *cut* to the nearest whitespace within *max_chars* if inside a word."""
-    if max_pos is None:
-        max_pos = len(content)
+    """Move *cut* to the nearest whitespace within 10 characters if inside a word."""
+    limit = len(content) if max_pos is None else max_pos
     if cut <= 0 or cut >= len(content):
         return cut
     if content[cut - 1].isspace() or content[cut].isspace():
         return cut
 
-    left_ws = None
-    for i in range(1, max_chars + 1):
-        idx = cut - i
-        if idx < min_pos:
-            break
-        if content[idx].isspace():
-            left_ws = idx
-            break
-
-    right_ws = None
-    for i in range(1, max_chars + 1):
-        idx = cut + i
-        if idx > max_pos or idx >= len(content):
-            break
-        if content[idx].isspace():
-            right_ws = idx
-            break
-
-    if left_ws is not None and right_ws is not None:
-        if (cut - left_ws) <= (right_ws - cut):
-            return left_ws
-        return right_ws
-    if left_ws is not None:
-        return left_ws
-    if right_ws is not None:
-        return right_ws
-    return cut
+    left = _scan_boundary(content, cut, -1, min_pos)
+    right = _scan_boundary(content, cut, 1, limit)
+    candidates = [p for p in (left, right) if p is not None]
+    if not candidates:
+        return cut
+    return min(candidates, key=lambda p: abs(p - cut))
 
 
 def strip_leading_headings(text: str) -> str:
