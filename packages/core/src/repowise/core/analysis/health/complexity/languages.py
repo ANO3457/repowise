@@ -1039,12 +1039,11 @@ _C = LanguageNodeMap(
 _CSHARP = LanguageNodeMap(
     bodyless=_no_body_field,
     ctor_kinds=frozenset({"constructor_declaration"}),
-    # ``override`` and ``extern`` modifiers; P/Invoke and source-generated
-    # bindings, whose parameters a native ABI or a message template fixes; and
-    # data-driven tests, whose arguments the runner supplies.
+    # ``override`` modifier and data-driven tests, whose arguments the runner
+    # supplies.
     fixed_signature_markers=frozenset(
         {
-            "override", "extern", "DllImport", "LibraryImport", "LoggerMessage",
+            "override",
             "Theory", "InlineData", "MemberData", "ClassData", "DataRow", "DataTestMethod",
             "DynamicData", "TestCase", "TestCaseSource",
         }
