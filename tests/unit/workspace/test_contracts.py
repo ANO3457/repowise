@@ -63,6 +63,16 @@ class TestNormalizeHttpPath:
         assert normalize_http_path("orders/{id:int?}/lines") == "/orders/{param}/lines"
         assert normalize_http_path("/users/{id}?page={page}") == "/users/{param}"
 
+    def test_gin_echo_named_catch_all_is_a_param(self) -> None:
+        assert normalize_http_path("/swagger/*any") == "/swagger/{param}"
+        assert normalize_http_path("/static/*filepath") == "/static/{param}"
+        assert normalize_http_path("/v1/*path/sub") == "/v1/{param}/sub"
+
+    def test_star_inside_a_segment_and_double_star_stay_literal(self) -> None:
+        assert normalize_http_path("/a*b") == "/a*b"
+        assert normalize_http_path("/files/*") == "/files/{param}"
+        assert normalize_http_path("/**") == "/**"
+
 
 # ---------------------------------------------------------------------------
 # HttpExtractor
