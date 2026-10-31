@@ -30,6 +30,7 @@ from ..framework_routes import scan_code
 from ..language_data import get_builtin_types
 from ..type_names import (
     bare_type_name,
+    builtin_type_spelling,
     is_resolvable_type_name,
     strip_type_arguments,
     type_qualifier,
@@ -345,6 +346,17 @@ _RUST_CONSTRUCTED = re.compile(
 
 _C_FAMILY = (_TYPED_DECLARATION, _INFERRED_FROM_NEW)
 
+# Pascal names first: ``FToast: TToast;``, ``var A, B: TFoo;``, ``(const X: TBar)``.
+# Every name of a ``A, B: T`` list is its own match: the type sits in a
+# lookahead, so the scan resumes right after the name. ``:=`` is an assignment
+# and never matches. A field closes on ``;``, a parameter on ``;`` or ``)``,
+# which only parentheses tell apart (``_PARAMETERS_AT_CLASS_SCOPE``).
+_PASCAL_TYPE = r"[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*(?:<(?:[^<>]|<[^<>]*>)*>)?"
+_PASCAL_DECLARATION = re.compile(
+    rf"(?<![\w.])(?P<name>[A-Za-z_]\w*)(?=(?:\s*,\s*[A-Za-z_]\w*)*\s*:(?!=)\s*"
+    rf"(?P<type>{_PASCAL_TYPE})\s*(?P<closer>[;)=]))"
+)
+
 # A Java primitive or primitive array, ``long start`` / ``int[] xs``. Kept as an
 # external type: no call is made on one, but an overload is chosen by it.
 _JAVA_PRIMITIVE_DECLARATION = re.compile(
@@ -383,6 +395,7 @@ _LANGUAGE_PATTERNS: dict[str, tuple[re.Pattern[str], ...]] = {
         _JAVA_PATTERN_VARIABLE,
     ),
     "kotlin": _KT_FAMILY,
+    "pascal": (_PASCAL_DECLARATION,),
     "python": _PY_FAMILY,
     "rust": (_RUST_ANNOTATED, _RUST_CONSTRUCTED),
     "swift": _SWIFT_FAMILY,
@@ -396,7 +409,9 @@ RECEIVER_TYPE_LANGUAGES = frozenset(_LANGUAGE_PATTERNS)
 # writes ``self.foo.bar()``, a dotted receiver the grammar mints no call site
 # for, so class scope could only bind a bare local to a field. Membership rests
 # on the scan actually finding typed fields in the language's idiom.
-IMPLICIT_FIELD_LANGUAGES = frozenset({"apex", "cpp", "csharp", "dart", "java", "kotlin", "swift"})
+IMPLICIT_FIELD_LANGUAGES = frozenset(
+    {"apex", "cpp", "csharp", "dart", "java", "kotlin", "pascal", "swift"}
+)
 
 # Languages whose scan keeps a declaration of a builtin type, marked external,
 # so the resolver can refuse a call on it instead of matching the method name.
@@ -406,7 +421,8 @@ EXTERNAL_TYPE_LANGUAGES = frozenset({"java"})
 # Those, and Kotlin, whose scan keeps the marked declaration without refusing:
 # a call on it may still reach a repo extension of the builtin. Apex keeps it so
 # a builtin-typed local still reads as a variable and types overload arguments.
-_MARKED_BUILTIN_LANGUAGES = EXTERNAL_TYPE_LANGUAGES | {"kotlin", "apex"}
+# Pascal for Kotlin's reason: a ``record helper for string`` extends a builtin.
+_MARKED_BUILTIN_LANGUAGES = EXTERNAL_TYPE_LANGUAGES | {"kotlin", "apex", "pascal"}
 _EXTERNAL_TYPE = "external:"
 #: A Kotlin string literal receiver, typed as a declared ``String`` would be.
 STRING_LITERAL_TYPE = _EXTERNAL_TYPE + "String"
@@ -951,6 +967,9 @@ _LANGUAGE_BLOCK_COMMENTS: dict[str, re.Pattern[str]] = {
     "cpp": _BLOCK_COMMENT,
     "dart": _BLOCK_COMMENT,
     "kotlin": _BLOCK_COMMENT,
+    # `{ ... }` and `(* ... *)`, compiler directives included: prose in either
+    # writes `Name: Type` as often as code does.
+    "pascal": re.compile(r"\{[^}]*\}|\(\*.*?\*\)", re.DOTALL),
     "typescript": _BLOCK_COMMENT,
 }
 
@@ -962,6 +981,7 @@ _LANGUAGE_COMMENTS: dict[str, re.Pattern[str]] = {
     "go": _LINE_COMMENT,
     "java": _LINE_COMMENT,
     "kotlin": _LINE_COMMENT,
+    "pascal": _LINE_COMMENT,
     "rust": _LINE_COMMENT,
     "swift": _LINE_COMMENT,
     "python": _HASH_COMMENT,
@@ -1070,7 +1090,7 @@ def _apex_member_of_repo_type(raw: str, language: str) -> bool:
 
 # Languages whose constructor parameter lists sit at class scope, unextracted,
 # with defaults closing on `=`: a declaration inside parentheses owns no field.
-_PARAMETERS_AT_CLASS_SCOPE = frozenset({"dart"})
+_PARAMETERS_AT_CLASS_SCOPE = frozenset({"dart", "pascal"})
 _PARENTHESIS = re.compile(r"[()]")
 
 
@@ -1195,7 +1215,9 @@ def scan_declarations(text: str, language: str) -> tuple[Declaration, ...]:
             found.append(
                 Declaration(
                     bisect_right(starts, match.start()),
-                    match.group("name"),
+                    # Pascal is case-insensitive: its variable receivers arrive
+                    # folded too (languages/pascal_names.py).
+                    match.group("name").lower() if language == "pascal" else match.group("name"),
                     type_name,
                     closer,
                     unwrapped,
@@ -1222,7 +1244,8 @@ def _builtin_type_name(raw: str, language: str) -> str | None:
     if _nests_in_a_builtin(raw, language):
         return _EXTERNAL_TYPE + strip_type_arguments(raw).strip()
     name = raw if raw.isidentifier() else bare_type_name(raw)
-    return _EXTERNAL_TYPE + name if name in get_builtin_types(language) else None
+    spelled = builtin_type_spelling(name, language)
+    return _EXTERNAL_TYPE + spelled if spelled is not None else None
 
 
 def external_type_name(type_name: str | None) -> str | None:

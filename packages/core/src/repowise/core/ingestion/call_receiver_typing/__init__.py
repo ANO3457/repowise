@@ -75,7 +75,8 @@ from .ranges import RangeVariableTypes, _is_its_own_container  # noqa: F401
 from .rust import RustReturnTypes
 
 # Languages whose extensions the extension index holds, keyed on the type extended.
-_EXTENSION_LANGUAGES = frozenset({"csharp", "kotlin"})
+# Pascal's are ``class``/``record helper for T`` methods.
+_EXTENSION_LANGUAGES = frozenset({"csharp", "kotlin", "pascal"})
 # Bitwise members of Kotlin's ``Int`` and ``Long`` and the parameter type each
 # takes (None: the receiver's own). A member beats a same-named extension
 # wherever it accepts the argument, so ``i and 0x3f`` is ``Int.and(Int)``.
@@ -397,11 +398,12 @@ class ReceiverTypingMixin(
         if language not in RECEIVER_TYPE_LANGUAGES:
             return None
         # A capitalised receiver already names a type and every tier above has
-        # tried it, so only a C# one is read further: C# spells its properties
-        # and many fields that way. An underscore one cannot be anything but a name.
+        # tried it, so only a C# or Pascal one is read further: both spell
+        # properties and fields that way (``FToast``, ``AItem``). An underscore
+        # one cannot be anything but a name.
         head = receiver_name[:1]
         literal = receiver_name == STRING_LITERAL_RECEIVER
-        if not (head.islower() or head == "_" or literal or language == "csharp"):
+        if not (head.islower() or head == "_" or literal or language in ("csharp", "pascal")):
             return None
 
         # Refuse before reading the file: nothing resolves unless some class
