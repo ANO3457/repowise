@@ -245,13 +245,19 @@ def snippet_around(content: str, query: str, length: int = _SNIPPET_LEN) -> str:
     start = min(start, max(0, len(content) - length))
     end = start + length
 
-    start = _snap_cut(content, start, max_chars=10, min_pos=0, max_pos=position)
+    start = _snap_cut(
+        content,
+        start,
+        max_chars=10,
+        min_pos=max(0, end - length),
+        max_pos=position,
+    )
     end = _snap_cut(
         content,
         end,
         max_chars=10,
         min_pos=position + matched_len,
-        max_pos=start + length,
+        max_pos=min(len(content), start + length),
     )
     result = content[start:end].strip()
     return result if result else content[:length].strip()
