@@ -336,7 +336,12 @@ def test_half_a_command_line_is_an_error_not_a_prompt(indexed_repo: Path) -> Non
     )
 
     assert result.exit_code == 1, result.output
-    assert json.loads(result.output)["error"].startswith("--title and --decision")
+    payload = json.loads(result.output)
+    assert payload["error"].startswith("--title and --decision")
+
+    guidance = payload.get("guidance", "")
+    assert "prompted" not in guidance
+    assert "--decision" in guidance
 
 
 def test_decision_add_help_lists_a_flag_per_field() -> None:
