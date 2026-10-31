@@ -212,7 +212,7 @@ _HEDGE_MARKERS = (
 # grounded claim it is a caveat, held at "medium": "high" tells the agent not to
 # re-read, which the answer itself disputes. The bare "is not included/shown"
 # form is matched in confidence.py, where a following "in the checksum" marks
-# it as a statement about the code instead.
+# it as a statement about the code instead; so is "truncated in the excerpts".
 _GAP_MARKERS = (
     "not in the retrieved",
     "not in the excerpts",
@@ -225,6 +225,8 @@ _GAP_MARKERS = (
     "not defined in the retrieved",
     "not directly included",
     "not fully included",
+    "not fully visible",
+    "not fully shown",
     "cannot be definitively",
 )
 
@@ -354,7 +356,9 @@ _ANSWER_COVERAGE_FLOOR = 0.5
 #     held-at-medium notes for the identifier gate and a weak dominant top.
 # 29: a reply stopped at the token cap is retried once with a larger cap; an
 #     answer whose text was cut off is held at medium.
-_ANSWER_SCHEMA_VERSION = 29
+# 30: an answer saying the code it describes was cut from its excerpts
+#     ("not fully visible", "truncated in the retrieved") admits a gap.
+_ANSWER_SCHEMA_VERSION = 30
 
 # Above this a whole-file Read costs more than the answer, so the low-confidence
 # hint names a ranged Read or a skeleton instead.
