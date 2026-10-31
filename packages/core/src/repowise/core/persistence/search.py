@@ -149,9 +149,7 @@ async def _stored_vocabulary(conn: Any, page_ids: Sequence[str]) -> dict[str, st
 # ``NOT EXISTS`` rather than ``NOT IN``: the subquery's column is a primary key
 # and can never be NULL today, but ``NOT IN`` returns no rows at all the day one
 # is, which would turn this into a silent no-op instead of a visible failure.
-_ORPHAN_PREDICATE = (
-    "NOT EXISTS (SELECT 1 FROM wiki_pages p WHERE p.id = page_fts.page_id)"
-)
+_ORPHAN_PREDICATE = "NOT EXISTS (SELECT 1 FROM wiki_pages p WHERE p.id = page_fts.page_id)"
 _ORPHAN_COUNT_SQL = f"SELECT count(*) FROM page_fts WHERE {_ORPHAN_PREDICATE}"
 _ORPHAN_DELETE_SQL = f"DELETE FROM page_fts WHERE {_ORPHAN_PREDICATE}"
 
@@ -235,7 +233,9 @@ def snippet_around(content: str, query: str, length: int = _SNIPPET_LEN) -> str:
             matched_len = len(term)
     if position == -1:
         end = min(length, len(content))
-        end = _snap_cut(content, end, max_chars=10, min_pos=1, max_pos=length)
+        end = _snap_cut(content, end, max_chars=10, min_pos=1, max_pos=min(length, len(content)))
+        if end > length:
+            end = length
         return content[:end].rstrip()
 
     # Centre the window, then slide it back inside the page rather than
@@ -243,15 +243,14 @@ def snippet_around(content: str, query: str, length: int = _SNIPPET_LEN) -> str:
     # would otherwise return a window shorter than the budget for no reason.
     start = max(0, position - length // 2)
     start = min(start, max(0, len(content) - length))
-    end = start + length
-
     start = _snap_cut(
         content,
         start,
         max_chars=10,
-        min_pos=max(0, end - length),
+        min_pos=max(0, position - length + matched_len),
         max_pos=position,
     )
+    end = min(len(content), start + length)
     end = _snap_cut(
         content,
         end,
@@ -259,6 +258,8 @@ def snippet_around(content: str, query: str, length: int = _SNIPPET_LEN) -> str:
         min_pos=position + matched_len,
         max_pos=min(len(content), start + length),
     )
+    if end - start > length:
+        end = start + length
     result = content[start:end].strip()
     return result if result else content[:length].strip()
 
@@ -290,7 +291,7 @@ def _snap_cut(
     right_ws = None
     for i in range(1, max_chars + 1):
         idx = cut + i
-        if idx > max_pos:
+        if idx > max_pos or idx >= len(content):
             break
         if content[idx].isspace():
             right_ws = idx
@@ -563,10 +564,7 @@ class FullTextSearch:
         """
         for chunk in chunked(list(pages)):
             await self.index_many(
-                [
-                    (p.page_id, p.title, p.content, p.summary, p.target_path, p.digest)
-                    for p in chunk
-                ]
+                [(p.page_id, p.title, p.content, p.summary, p.target_path, p.digest) for p in chunk]
             )
 
     async def index_many(
