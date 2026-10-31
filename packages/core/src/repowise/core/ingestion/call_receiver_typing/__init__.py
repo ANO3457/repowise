@@ -307,7 +307,9 @@ class ReceiverTypingMixin(
             file_path, self._file_extension_methods, self._merged_import_extensions
         )
 
-    def _extension_target(self, file_path: str, key: tuple[str, str]) -> tuple[str, str] | None:
+    def _extension_target(
+        self, file_path: str, key: tuple[str, str], argument_count: int | None = None
+    ) -> tuple[str, str] | None:
         """The extension method a ``(type, method)`` pair names, and its scope.
 
         Same three scopes as ``_receiver_pair_match``, over the extension index.
@@ -319,7 +321,7 @@ class ReceiverTypingMixin(
         type_name, method_name = key
         if not self._writes_one_type(file_path, site[0], type_name):
             return None
-        if self._reaches_a_member(type_name, method_name):
+        if self._reaches_a_member(type_name, method_name, argument_count):
             return None
         own = self._file_extension_methods.get(file_path, {})
         if key in own:
@@ -1228,7 +1230,7 @@ class ReceiverTypingMixin(
             return None
         # Extensions are indexed by the type they name, written without arity.
         key = (id_segment_name(type_name), call.target_name)
-        extension = self._extension_target(file_path, key)
+        extension = self._extension_target(file_path, key, call.argument_count)
         if extension is None or self._symbols_by_id[extension[0]].language != language:
             return None
         return self._extension_typed_call(caller_id, *extension, call.line)
@@ -1284,7 +1286,32 @@ class ReceiverTypingMixin(
             return ResolvedCall(caller_id, sym_id, 0.88, line, "receiver_field_import")
         return ResolvedCall(caller_id, sym_id, 0.75, line, "receiver_field_global")
 
-    def _reaches_a_member(self, type_name: str, method_name: str) -> bool:
+    def _member_admits(self, declared_id: str, argument_count: int | None) -> bool:
+        """True if *declared_id* or any of its overloads admits *argument_count*."""
+        rep = getattr(self, "_overload_rep", {}).get(declared_id, declared_id)
+        overloads = getattr(self, "_overload_members", {}).get(rep)
+        if overloads:
+            return any(
+                _admits(sym, argument_count)
+                for mid, _ in overloads
+                if (sym := self._symbols_by_id.get(mid)) is not None
+            )
+        sym = self._symbols_by_id.get(declared_id)
+        return sym is not None and _admits(sym, argument_count)
+
+    def _type_hierarchy_admits(
+        self, sym_id: str, method_name: str, argument_count: int | None
+    ) -> bool:
+        """True if *sym_id* or any ancestor declares *method_name* admitting *argument_count*."""
+        for a in (sym_id, *self._ancestors_of(sym_id)):
+            declared_id = self._declares(a, method_name)
+            if declared_id is not None and self._member_admits(declared_id, argument_count):
+                return True
+        return False
+
+    def _reaches_a_member(
+        self, type_name: str, method_name: str, argument_count: int | None = None
+    ) -> bool:
         """Could a class of this name reach a member *method_name*, its own or inherited?
 
         C# and Kotlin dispatch to a member in preference to an extension, and
@@ -1302,7 +1329,7 @@ class ReceiverTypingMixin(
             symbol = self._symbols_by_id.get(sym_id)
             if symbol is None or symbol.kind not in _TYPE_KINDS:
                 continue
-            if any(self._declares(a, method_name) for a in (sym_id, *self._ancestors_of(sym_id))):
+            if self._type_hierarchy_admits(sym_id, method_name, argument_count):
                 return True
         return False
 
